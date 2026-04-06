@@ -6,13 +6,14 @@ const MAPS = [
 
 const NADEO_AUTH_URL = 'https://prod.trackmania.core.nadeo.online/v2/authentication/token/basic';
 const NADEO_LIVE_URL = 'https://live-services.trackmania.nadeo.live';
-const NADEO_CORE_URL = 'https://prod.trackmania.core.nadeo.online';
+const TM_OAUTH_TOKEN_URL = 'https://api.trackmania.com/api/access_token';
+const TM_DISPLAY_NAMES_URL = 'https://api.trackmania.com/api/display-names';
 const USER_AGENT = 'redbull-faster-leaderboard / cloudflare-worker';
 const PAGE_SIZE = 100;
 const MAX_PAGES = 20; // Safety cap: 2000 players per map max
 
-// ── Auth ──────────────────────────────────────────────────────────────
-async function authenticate(login, password, audience) {
+// ── Nadeo Auth (for leaderboards) ─────────────────────────────────────
+async function authenticateNadeo(login, password, audience) {
   const credentials = btoa(`${login}:${password}`);
   const res = await fetch(NADEO_AUTH_URL, {
     method: 'POST',
@@ -25,9 +26,30 @@ async function authenticate(login, password, audience) {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Auth failed (${audience}): ${res.status} ${text}`);
+    throw new Error(`Nadeo auth failed: ${res.status} ${text}`);
   }
   return (await res.json()).accessToken;
+}
+
+// ── OAuth Auth (for display names) ────────────────────────────────────
+async function authenticateOAuth(clientId, clientSecret) {
+  const res = await fetch(TM_OAUTH_TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'User-Agent': USER_AGENT,
+    },
+    body: new URLSearchParams({
+      grant_type: 'client_credentials',
+      client_id: clientId,
+      client_secret: clientSecret,
+    }),
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`OAuth auth failed: ${res.status} ${text}`);
+  }
+  return (await res.json()).access_token;
 }
 
 // ── Leaderboard fetching ──────────────────────────────────────────────
@@ -54,16 +76,17 @@ async function fetchMapLeaderboard(mapUid, token) {
   return allRecords;
 }
 
-// ── Display names ─────────────────────────────────────────────────────
-async function fetchDisplayNames(accountIds, token) {
+// ── Display names (OAuth API) ─────────────────────────────────────────
+async function fetchDisplayNames(accountIds, oauthToken) {
   const names = {};
   const BATCH_SIZE = 50;
   for (let i = 0; i < accountIds.length; i += BATCH_SIZE) {
     const batch = accountIds.slice(i, i + BATCH_SIZE);
-    const url = `${NADEO_CORE_URL}/accounts/displayNames/?accountIdList=${batch.join(',')}`;
+    const params = batch.map(id => `accountId[]=${id}`).join('&');
+    const url = `${TM_DISPLAY_NAMES_URL}?${params}`;
     const res = await fetch(url, {
       headers: {
-        'Authorization': `nadeo_v1 t=${token}`,
+        'Authorization': `Bearer ${oauthToken}`,
         'User-Agent': USER_AGENT,
       },
     });
@@ -72,13 +95,8 @@ async function fetchDisplayNames(accountIds, token) {
       continue;
     }
     const data = await res.json();
-    // Response is an array of { accountId, displayName, timestamp }
-    if (Array.isArray(data)) {
-      for (const entry of data) {
-        names[entry.accountId] = entry.displayName;
-      }
-    } else if (typeof data === 'object') {
-      // Some API versions return { accountId: displayName }
+    // Response is { accountId: displayName, ... }
+    if (typeof data === 'object' && !Array.isArray(data)) {
       Object.assign(names, data);
     }
   }
@@ -175,10 +193,10 @@ export default {
     if (cached) return cached;
 
     try {
-      // Authenticate with both audiences in parallel
-      const [liveToken, coreToken] = await Promise.all([
-        authenticate(env.NADEO_LOGIN, env.NADEO_PASSWORD, 'NadeoLiveServices'),
-        authenticate(env.NADEO_LOGIN, env.NADEO_PASSWORD, 'NadeoServices'),
+      // Authenticate: Nadeo (leaderboards) + OAuth (display names) in parallel
+      const [liveToken, oauthToken] = await Promise.all([
+        authenticateNadeo(env.NADEO_LOGIN, env.NADEO_PASSWORD, 'NadeoLiveServices'),
+        authenticateOAuth(env.OAUTH_CLIENT_ID, env.OAUTH_CLIENT_SECRET),
       ]);
 
       // Fetch all 3 map leaderboards in parallel
@@ -194,7 +212,7 @@ export default {
 
       // Fetch display names for all players
       const allAccountIds = entries.map(e => e.accountId);
-      const displayNames = await fetchDisplayNames(allAccountIds, coreToken);
+      const displayNames = await fetchDisplayNames(allAccountIds, oauthToken);
 
       // Build final response
       const leaderboard = entries.map(e => ({

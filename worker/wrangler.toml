@@ -12,5 +12,7 @@ MAP2_NAME = "FASTER EVEREST"
 MAP3_NAME = "FASTER SKATE"
 
 # Secrets (set via `wrangler secret put`):
-# NADEO_LOGIN
-# NADEO_PASSWORD
+# NADEO_LOGIN        — Service account login
+# NADEO_PASSWORD     — Service account password
+# OAUTH_CLIENT_ID    — OAuth app identifier from api.trackmania.com
+# OAUTH_CLIENT_SECRET — OAuth app secret from api.trackmania.com
