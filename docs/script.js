@@ -1,6 +1,6 @@
 // ── Configuration ─────────────────────────────────────────────────────
 // Replace with your Cloudflare Worker URL after deployment
-const API_URL = 'https://redbull-faster-leaderboard.YOUR_SUBDOMAIN.workers.dev/leaderboard';
+const API_URL = 'https://redbull-faster-leaderboard.redbull-faster.workers.dev/leaderboard';
 const REFRESH_INTERVAL = 60; // seconds
 
 // ── DOM refs ──────────────────────────────────────────────────────────
