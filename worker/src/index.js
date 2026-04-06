@@ -176,28 +176,37 @@ const COUNTRY_TO_ISO = {
   'Other Countries': null,
 };
 
-// ── Display names (OAuth API) ─────────────────────────────────────────
+// ── Display names (OAuth API) — parallelized ─────────────────────────
 async function fetchDisplayNames(accountIds, oauthToken) {
   const names = {};
   const BATCH_SIZE = 50;
+  const PARALLEL = 10; // Run 10 batches at a time
+
+  const batches = [];
   for (let i = 0; i < accountIds.length; i += BATCH_SIZE) {
-    const batch = accountIds.slice(i, i + BATCH_SIZE);
-    const params = batch.map(id => `accountId[]=${id}`).join('&');
-    const url = `${TM_DISPLAY_NAMES_URL}?${params}`;
-    const res = await fetch(url, {
-      headers: {
-        'Authorization': `Bearer ${oauthToken}`,
-        'User-Agent': USER_AGENT,
-      },
-    });
-    if (!res.ok) {
-      console.error(`Display names fetch failed: ${res.status}`);
-      continue;
-    }
-    const data = await res.json();
-    if (typeof data === 'object' && !Array.isArray(data)) {
-      Object.assign(names, data);
-    }
+    batches.push(accountIds.slice(i, i + BATCH_SIZE));
+  }
+
+  // Process batches in parallel groups
+  for (let g = 0; g < batches.length; g += PARALLEL) {
+    const group = batches.slice(g, g + PARALLEL);
+    const results = await Promise.all(group.map(async (batch) => {
+      const params = batch.map(id => `accountId[]=${id}`).join('&');
+      const url = `${TM_DISPLAY_NAMES_URL}?${params}`;
+      const res = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${oauthToken}`,
+          'User-Agent': USER_AGENT,
+        },
+      });
+      if (!res.ok) {
+        console.error(`Display names fetch failed: ${res.status}`);
+        return {};
+      }
+      const data = await res.json();
+      return (typeof data === 'object' && !Array.isArray(data)) ? data : {};
+    }));
+    for (const r of results) Object.assign(names, r);
   }
   return names;
 }

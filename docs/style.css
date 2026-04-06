@@ -214,14 +214,18 @@ body {
 .table-wrapper {
   border: 1px solid var(--border);
   border-radius: 0.5rem;
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   background: var(--bg-secondary);
+}
+
+.leaderboard {
+  min-width: 750px;
 }
 
 .leaderboard {
   width: 100%;
   border-collapse: collapse;
-  table-layout: fixed;
 }
 
 .leaderboard thead {
