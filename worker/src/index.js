@@ -11,7 +11,7 @@ const TM_OAUTH_TOKEN_URL = 'https://api.trackmania.com/api/access_token';
 const TM_DISPLAY_NAMES_URL = 'https://api.trackmania.com/api/display-names';
 const USER_AGENT = 'redbull-faster-leaderboard / cloudflare-worker';
 const PAGE_SIZE = 100;
-const MAX_PAGES = 20;
+const MAX_PAGES = 200; // 20000 players per map max
 
 // ── Nadeo Auth ────────────────────────────────────────────────────────
 async function authenticateNadeo(login, password, audience) {
