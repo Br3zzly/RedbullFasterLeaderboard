@@ -289,9 +289,10 @@ body {
 /* ── Delta time ────────────────────────────────────────────────────── */
 .delta {
   color: var(--red);
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   font-weight: 400;
-  margin-right: 0.3rem;
+  display: inline-block;
+  margin-top: 0.15rem;
 }
 
 /* ── Map rank prefix ───────────────────────────────────────────────── */

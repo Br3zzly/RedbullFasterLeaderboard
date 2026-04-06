@@ -107,7 +107,7 @@ function buildRow(entry, bestTime) {
     <td class="col-time ${t1 === null ? 'time-missing' : ''}">${t1 !== null ? r1 + t1 : '—'}</td>
     <td class="col-time ${t2 === null ? 'time-missing' : ''}">${t2 !== null ? r2 + t2 : '—'}</td>
     <td class="col-time ${t3 === null ? 'time-missing' : ''}">${t3 !== null ? r3 + t3 : '—'}</td>
-    <td class="col-total">${deltaHtml}${total ?? '—'}</td>
+    <td class="col-total">${total ?? '—'}${deltaHtml ? '<br>' + deltaHtml : ''}</td>
     <td class="col-improved">${lastImproved}</td>
   `;
   return tr;
