@@ -176,39 +176,64 @@ const COUNTRY_TO_ISO = {
   'Other Countries': null,
 };
 
-// ── Display names (OAuth API) — parallelized ─────────────────────────
-async function fetchDisplayNames(accountIds, oauthToken) {
-  const names = {};
+// ── Display names with KV cache ───────────────────────────────────────
+async function fetchDisplayNames(accountIds, oauthToken, kvNamespace) {
   const BATCH_SIZE = 50;
-  const PARALLEL = 10; // Run 10 batches at a time
+  const PARALLEL = 20;
 
-  const batches = [];
-  for (let i = 0; i < accountIds.length; i += BATCH_SIZE) {
-    batches.push(accountIds.slice(i, i + BATCH_SIZE));
+  // 1. Load cached names from KV
+  let cached = {};
+  try {
+    const stored = await kvNamespace.get('names', 'json');
+    if (stored) cached = stored;
+  } catch {}
+
+  // 2. Find which IDs we don't have names for yet
+  const uncached = accountIds.filter(id => !cached[id]);
+  console.log(`Display names: ${Object.keys(cached).length} cached, ${uncached.length} to resolve`);
+
+  // 3. Fetch only the missing names from OAuth API
+  if (uncached.length > 0) {
+    const newNames = {};
+    const batches = [];
+    for (let i = 0; i < uncached.length; i += BATCH_SIZE) {
+      batches.push(uncached.slice(i, i + BATCH_SIZE));
+    }
+
+    for (let g = 0; g < batches.length; g += PARALLEL) {
+      const group = batches.slice(g, g + PARALLEL);
+      const results = await Promise.all(group.map(async (batch) => {
+        const params = batch.map(id => `accountId[]=${id}`).join('&');
+        const url = `${TM_DISPLAY_NAMES_URL}?${params}`;
+        try {
+          const res = await fetch(url, {
+            headers: {
+              'Authorization': `Bearer ${oauthToken}`,
+              'User-Agent': USER_AGENT,
+            },
+          });
+          if (!res.ok) return {};
+          const data = await res.json();
+          return (typeof data === 'object' && !Array.isArray(data)) ? data : {};
+        } catch {
+          return {};
+        }
+      }));
+      for (const r of results) Object.assign(newNames, r);
+    }
+
+    // Merge new names into cache
+    Object.assign(cached, newNames);
+
+    // 4. Write updated cache back to KV (non-blocking)
+    try {
+      await kvNamespace.put('names', JSON.stringify(cached));
+    } catch (e) {
+      console.error('KV write failed:', e);
+    }
   }
 
-  // Process batches in parallel groups
-  for (let g = 0; g < batches.length; g += PARALLEL) {
-    const group = batches.slice(g, g + PARALLEL);
-    const results = await Promise.all(group.map(async (batch) => {
-      const params = batch.map(id => `accountId[]=${id}`).join('&');
-      const url = `${TM_DISPLAY_NAMES_URL}?${params}`;
-      const res = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${oauthToken}`,
-          'User-Agent': USER_AGENT,
-        },
-      });
-      if (!res.ok) {
-        console.error(`Display names fetch failed: ${res.status}`);
-        return {};
-      }
-      const data = await res.json();
-      return (typeof data === 'object' && !Array.isArray(data)) ? data : {};
-    }));
-    for (const r of results) Object.assign(names, r);
-  }
-  return names;
+  return cached;
 }
 
 // ── Aggregation ───────────────────────────────────────────────────────
@@ -331,7 +356,7 @@ export default {
       const entries = aggregateLeaderboard(map1Records, map2Records, map3Records, getCountryIso);
 
       const allAccountIds = entries.map(e => e.accountId);
-      const displayNames = await fetchDisplayNames(allAccountIds, oauthToken);
+      const displayNames = await fetchDisplayNames(allAccountIds, oauthToken, env.DISPLAY_NAMES);
 
       const leaderboard = entries.map(e => ({
         rank: e.rank,

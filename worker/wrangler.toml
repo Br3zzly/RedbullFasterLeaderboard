@@ -16,3 +16,10 @@ MAP3_NAME = "FASTER SKATE"
 # NADEO_PASSWORD     — Service account password
 # OAUTH_CLIENT_ID    — OAuth app identifier from api.trackmania.com
 # OAUTH_CLIENT_SECRET — OAuth app secret from api.trackmania.com
+
+# KV namespace for caching display names
+# Create with: npx wrangler kv namespace create DISPLAY_NAMES
+# Then paste the id below
+[[kv_namespaces]]
+binding = "DISPLAY_NAMES"
+id = "16d9719b0cc94de891162f56b92f334a"
