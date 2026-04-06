@@ -381,24 +381,25 @@ export default {
       const allAccountIds = entries.map(e => e.accountId);
       const displayNames = await fetchDisplayNames(allAccountIds, oauthToken, env.DISPLAY_NAMES);
 
+      // Short keys to minimize JSON size (~4MB → ~2MB)
+      // r=rank, n=name, f=flag, t1/t2/t3=mapTimes, r1/r2/r3=mapRanks, s=sum, mc=mapCount, li=lastImproved
       const leaderboard = entries.map(e => ({
-        rank: e.rank,
-        playerName: displayNames[e.accountId] || e.accountId,
-        accountId: e.accountId,
-        countryIso: e.countryIso,
-        map1Time: e.map1Time, map1Rank: e.map1Rank,
-        map2Time: e.map2Time, map2Rank: e.map2Rank,
-        map3Time: e.map3Time, map3Rank: e.map3Rank,
-        sumTime: e.sumTime,
-        mapCount: e.mapCount,
-        lastImproved: e.lastImproved,
+        r: e.rank,
+        n: displayNames[e.accountId] || e.accountId,
+        f: e.countryIso,
+        t1: e.map1Time, r1: e.map1Rank,
+        t2: e.map2Time, r2: e.map2Rank,
+        t3: e.map3Time, r3: e.map3Rank,
+        s: e.sumTime,
+        mc: e.mapCount,
+        li: e.lastImproved,
       }));
 
       const responseData = {
-        leaderboard,
-        mapNames,
-        lastUpdated: new Date().toISOString(),
-        totalPlayers: leaderboard.length,
+        l: leaderboard,
+        mn: mapNames,
+        lu: new Date().toISOString(),
+        tp: leaderboard.length,
       };
 
       const response = jsonResponse(responseData);

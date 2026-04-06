@@ -25,12 +25,21 @@ const $loadMoreInfo = document.getElementById('loadMoreInfo');
 let countdownTimer = null;
 let secondsLeft = REFRESH_INTERVAL;
 let currentData = null;
-let sortedData = null; // current sorted view
+let sortedData = null;
 let visibleCount = PAGE_SIZE;
-
-// Sort modes: 'total', 'map1', 'map2', 'map3'
 let sortMode = 'total';
 let mapNames = ['Map 1', 'Map 2', 'Map 3'];
+
+// ── Expand short API keys to readable names (once on receive) ─────────
+function expandEntry(e) {
+  return {
+    rank: e.r, name: e.n, flag: e.f,
+    t1: e.t1, r1: e.r1,
+    t2: e.t2, r2: e.r2,
+    t3: e.t3, r3: e.r3,
+    sum: e.s, mc: e.mc, li: e.li,
+  };
+}
 
 // ── Time formatting ───────────────────────────────────────────────────
 function formatTime(ms) {
@@ -80,30 +89,27 @@ function flagImg(iso) {
 // ── Sorting ───────────────────────────────────────────────────────────
 function getSortedData() {
   if (!currentData) return [];
-  const list = [...currentData.leaderboard];
+  const list = [...currentData.entries];
 
   if (sortMode === 'total') {
-    // Default sort from API (by mapCount desc, then sumTime asc)
     list.sort((a, b) => {
-      if (a.mapCount !== b.mapCount) return b.mapCount - a.mapCount;
-      return a.sumTime - b.sumTime;
+      if (a.mc !== b.mc) return b.mc - a.mc;
+      return a.sum - b.sum;
     });
   } else {
-    // Sort by specific map rank
-    const timeKey = sortMode + 'Time'; // map1Time, map2Time, map3Time
+    const key = sortMode === 'map1' ? 't1' : sortMode === 'map2' ? 't2' : 't3';
     list.sort((a, b) => {
-      const aHas = a[timeKey] !== null;
-      const bHas = b[timeKey] !== null;
+      const aHas = a[key] !== null;
+      const bHas = b[key] !== null;
       if (aHas && !bHas) return -1;
       if (!aHas && bHas) return 1;
-      if (aHas && bHas) return a[timeKey] - b[timeKey];
+      if (aHas && bHas) return a[key] - b[key];
       return 0;
     });
   }
 
-  // Assign display rank based on current sort
   for (let i = 0; i < list.length; i++) {
-    list[i]._displayRank = i + 1;
+    list[i]._dr = i + 1;
   }
 
   return list;
@@ -118,7 +124,6 @@ function setSort(mode) {
 }
 
 function updateHeaderStyles() {
-  // Remove active class from all sortable headers
   [$mapHeader1, $mapHeader2, $mapHeader3, $totalHeader].forEach(h => h.classList.remove('sort-active'));
 
   if (sortMode === 'map1') {
@@ -137,62 +142,67 @@ function updateHeaderStyles() {
 }
 
 // ── Build a single row ────────────────────────────────────────────────
-function buildRow(entry, bestTime) {
+function buildRow(e, bestTime) {
   const tr = document.createElement('tr');
-  tr.dataset.playerName = (entry.playerName || '').toLowerCase();
+  tr.dataset.playerName = (e.name || '').toLowerCase();
 
-  const displayRank = entry._displayRank ?? entry.rank;
+  const dr = e._dr ?? e.rank;
 
-  if (displayRank === 1) tr.className = 'top-1';
-  else if (displayRank === 2) tr.className = 'top-2';
-  else if (displayRank === 3) tr.className = 'top-3';
+  if (dr === 1) tr.className = 'top-1';
+  else if (dr === 2) tr.className = 'top-2';
+  else if (dr === 3) tr.className = 'top-3';
 
-  const rankClass = displayRank <= 3 ? `rank-${displayRank}` : '';
-  const flag = flagImg(entry.countryIso);
+  const rankClass = dr <= 3 ? `rank-${dr}` : '';
+  const flag = flagImg(e.flag);
 
-  const t1 = formatTime(entry.map1Time);
-  const t2 = formatTime(entry.map2Time);
-  const t3 = formatTime(entry.map3Time);
-  const total = formatTime(entry.sumTime);
+  const ft1 = formatTime(e.t1);
+  const ft2 = formatTime(e.t2);
+  const ft3 = formatTime(e.t3);
+  const total = formatTime(e.sum);
 
-  const r1 = entry.map1Rank != null ? `<span class="map-rank">(${entry.map1Rank})</span>` : '';
-  const r2 = entry.map2Rank != null ? `<span class="map-rank">(${entry.map2Rank})</span>` : '';
-  const r3 = entry.map3Rank != null ? `<span class="map-rank">(${entry.map3Rank})</span>` : '';
+  const mr1 = e.r1 != null ? `<span class="map-rank">(${e.r1})</span>` : '';
+  const mr2 = e.r2 != null ? `<span class="map-rank">(${e.r2})</span>` : '';
+  const mr3 = e.r3 != null ? `<span class="map-rank">(${e.r3})</span>` : '';
 
-  // Delta from 1st place (only in total sort mode)
   let deltaHtml = '';
-  if (sortMode === 'total' && displayRank > 1 && bestTime > 0 && entry.mapCount === 3) {
-    const d = formatDelta(entry.sumTime - bestTime);
+  if (sortMode === 'total' && dr > 1 && bestTime > 0 && e.mc === 3) {
+    const d = formatDelta(e.sum - bestTime);
     if (d) deltaHtml = `<span class="delta">(${d})</span> `;
   }
 
-  const lastImproved = timeAgo(entry.lastImproved);
+  const li = timeAgo(e.li);
 
   tr.innerHTML = `
-    <td class="col-rank ${rankClass}">${displayRank}</td>
-    <td class="col-player">${flag}${escapeHtml(entry.playerName)}</td>
-    <td class="col-time ${t1 === null ? 'time-missing' : ''}">${t1 !== null ? r1 + t1 : '—'}</td>
-    <td class="col-time ${t2 === null ? 'time-missing' : ''}">${t2 !== null ? r2 + t2 : '—'}</td>
-    <td class="col-time ${t3 === null ? 'time-missing' : ''}">${t3 !== null ? r3 + t3 : '—'}</td>
+    <td class="col-rank ${rankClass}">${dr}</td>
+    <td class="col-player">${flag}${escapeHtml(e.name)}</td>
+    <td class="col-time ${ft1 === null ? 'time-missing' : ''}">${ft1 !== null ? mr1 + ft1 : '—'}</td>
+    <td class="col-time ${ft2 === null ? 'time-missing' : ''}">${ft2 !== null ? mr2 + ft2 : '—'}</td>
+    <td class="col-time ${ft3 === null ? 'time-missing' : ''}">${ft3 !== null ? mr3 + ft3 : '—'}</td>
     <td class="col-total">${total ?? '—'}${deltaHtml ? '<br>' + deltaHtml : ''}</td>
-    <td class="col-improved">${lastImproved}</td>
+    <td class="col-improved">${li}</td>
   `;
   return tr;
 }
 
 // ── Rendering ─────────────────────────────────────────────────────────
 function renderLeaderboard(data) {
-  currentData = data;
+  // Expand short keys once
+  currentData = {
+    entries: data.l.map(expandEntry),
+    mapNames: data.mn,
+    lastUpdated: data.lu,
+    totalPlayers: data.tp,
+  };
 
-  if (data.mapNames) {
-    mapNames = data.mapNames;
-    $mapHeader1.childNodes[0].textContent = data.mapNames[0] || 'Map 1';
-    $mapHeader2.childNodes[0].textContent = data.mapNames[1] || 'Map 2';
-    $mapHeader3.childNodes[0].textContent = data.mapNames[2] || 'Map 3';
+  if (currentData.mapNames) {
+    mapNames = currentData.mapNames;
+    $mapHeader1.childNodes[0].textContent = mapNames[0] || 'Map 1';
+    $mapHeader2.childNodes[0].textContent = mapNames[1] || 'Map 2';
+    $mapHeader3.childNodes[0].textContent = mapNames[2] || 'Map 3';
   }
 
-  $playerCount.textContent = data.totalPlayers ?? data.leaderboard.length;
-  $lastUpdated.textContent = data.lastUpdated ? timeAgo(data.lastUpdated) : '—';
+  $playerCount.textContent = currentData.totalPlayers;
+  $lastUpdated.textContent = currentData.lastUpdated ? timeAgo(currentData.lastUpdated) : '—';
 
   sortedData = getSortedData();
   updateHeaderStyles();
@@ -206,8 +216,8 @@ function renderLeaderboard(data) {
 
 function getBestTime() {
   if (!currentData) return 0;
-  const best = currentData.leaderboard.find(e => e.mapCount === 3);
-  return best ? best.sumTime : 0;
+  const best = currentData.entries.find(e => e.mc === 3);
+  return best ? best.sum : 0;
 }
 
 function updateLoadMore() {
@@ -268,7 +278,7 @@ function applySearch() {
 
     for (const entry of sortedData) {
       if (count >= SEARCH_MAX_RESULTS) break;
-      if ((entry.playerName || '').toLowerCase().includes(query)) {
+      if ((entry.name || '').toLowerCase().includes(query)) {
         fragment.appendChild(buildRow(entry, bestTime));
         count++;
       }
