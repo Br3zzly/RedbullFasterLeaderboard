@@ -188,18 +188,30 @@ function showError(message) {
 }
 
 // ── Search ────────────────────────────────────────────────────────────
+const SEARCH_MAX_RESULTS = 200;
+let searchTimeout = null;
+
 function applySearch() {
   const query = $searchInput.value.trim().toLowerCase();
 
   if (query && currentData) {
-    // When searching, render ALL matching rows (not just visible page)
+    // Need at least 2 characters to search (avoids massive results on single letter)
+    if (query.length < 2) {
+      $tbody.innerHTML = '';
+      $loadMoreWrap.style.display = 'none';
+      return;
+    }
+
     const best = currentData.leaderboard.find(e => e.mapCount === 3);
     const bestTime = best ? best.sumTime : 0;
     const fragment = document.createDocumentFragment();
+    let count = 0;
 
     for (const entry of currentData.leaderboard) {
+      if (count >= SEARCH_MAX_RESULTS) break;
       if ((entry.playerName || '').toLowerCase().includes(query)) {
         fragment.appendChild(buildRow(entry, bestTime));
+        count++;
       }
     }
 
@@ -207,9 +219,13 @@ function applySearch() {
     $tbody.appendChild(fragment);
     $loadMoreWrap.style.display = 'none';
   } else if (currentData) {
-    // No search query — re-render with pagination
     renderVisible();
   }
+}
+
+function debouncedSearch() {
+  clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(applySearch, 150);
 }
 
 function renderVisible() {
@@ -228,7 +244,7 @@ function renderVisible() {
   updateLoadMore();
 }
 
-$searchInput.addEventListener('input', applySearch);
+$searchInput.addEventListener('input', debouncedSearch);
 
 // ── Data fetching ─────────────────────────────────────────────────────
 async function fetchLeaderboard() {

@@ -177,27 +177,43 @@ const COUNTRY_TO_ISO = {
 };
 
 // ── Display names with KV cache ───────────────────────────────────────
+const MAX_RESOLVE_PER_CYCLE = 200; // Max names to resolve per invocation (new + stale combined)
+
 async function fetchDisplayNames(accountIds, oauthToken, kvNamespace) {
   const BATCH_SIZE = 50;
   const PARALLEL = 20;
 
   // 1. Load cached names from KV
+  // Format: { accountId: { name: "PlayerName", ts: 1234567890 }, ... }
   let cached = {};
   try {
     const stored = await kvNamespace.get('names', 'json');
     if (stored) cached = stored;
   } catch {}
 
-  // 2. Find which IDs we don't have names for yet
-  const uncached = accountIds.filter(id => !cached[id]);
-  console.log(`Display names: ${Object.keys(cached).length} cached, ${uncached.length} to resolve`);
+  const now = Date.now();
 
-  // 3. Fetch only the missing names from OAuth API
-  if (uncached.length > 0) {
+  // 2. Find IDs with no cached name (new players)
+  const uncached = accountIds.filter(id => !cached[id]);
+
+  // 3. Find oldest cached names to re-resolve (for renames)
+  const byAge = accountIds
+    .filter(id => cached[id])
+    .sort((a, b) => (cached[a].ts || 0) - (cached[b].ts || 0));
+
+  // 4. Budget: new players first, fill remaining with oldest cached
+  const newToResolve = uncached.slice(0, MAX_RESOLVE_PER_CYCLE);
+  const remaining = MAX_RESOLVE_PER_CYCLE - newToResolve.length;
+  const staleToRefresh = remaining > 0 ? byAge.slice(0, remaining) : [];
+  const toResolve = [...newToResolve, ...staleToRefresh];
+
+  console.log(`Display names: ${Object.keys(cached).length} cached, ${uncached.length} new, resolving ${newToResolve.length} new + ${staleToRefresh.length} stale`);
+
+  if (toResolve.length > 0) {
     const newNames = {};
     const batches = [];
-    for (let i = 0; i < uncached.length; i += BATCH_SIZE) {
-      batches.push(uncached.slice(i, i + BATCH_SIZE));
+    for (let i = 0; i < toResolve.length; i += BATCH_SIZE) {
+      batches.push(toResolve.slice(i, i + BATCH_SIZE));
     }
 
     for (let g = 0; g < batches.length; g += PARALLEL) {
@@ -222,10 +238,12 @@ async function fetchDisplayNames(accountIds, oauthToken, kvNamespace) {
       for (const r of results) Object.assign(newNames, r);
     }
 
-    // Merge new names into cache
-    Object.assign(cached, newNames);
+    // Store with timestamp
+    for (const [id, name] of Object.entries(newNames)) {
+      cached[id] = { name, ts: now };
+    }
 
-    // 4. Write updated cache back to KV (non-blocking)
+    // Write updated cache to KV
     try {
       await kvNamespace.put('names', JSON.stringify(cached));
     } catch (e) {
@@ -233,7 +251,12 @@ async function fetchDisplayNames(accountIds, oauthToken, kvNamespace) {
     }
   }
 
-  return cached;
+  // 5. Return flat { accountId: displayName } map
+  const result = {};
+  for (const id of accountIds) {
+    if (cached[id]) result[id] = cached[id].name;
+  }
+  return result;
 }
 
 // ── Aggregation ───────────────────────────────────────────────────────
