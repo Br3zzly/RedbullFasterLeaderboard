@@ -46,12 +46,12 @@
       <table id="leaderboard" class="leaderboard" style="display:none">
         <thead>
           <tr>
-            <th class="col-rank">#</th>
+            <th class="col-rank" id="rankHeader">#</th>
             <th class="col-player">Player</th>
-            <th class="col-time" id="mapHeader1">Map 1</th>
-            <th class="col-time" id="mapHeader2">Map 2</th>
-            <th class="col-time" id="mapHeader3">Map 3</th>
-            <th class="col-total">Total</th>
+            <th class="col-time sortable" id="mapHeader1"><span>Map 1</span> <span class="sort-arrow"></span></th>
+            <th class="col-time sortable" id="mapHeader2"><span>Map 2</span> <span class="sort-arrow"></span></th>
+            <th class="col-time sortable" id="mapHeader3"><span>Map 3</span> <span class="sort-arrow"></span></th>
+            <th class="col-total sortable sort-active" id="totalHeader"><span>Total</span> <span class="sort-arrow"></span></th>
             <th class="col-improved">Last Improved</th>
           </tr>
         </thead>

@@ -295,6 +295,30 @@ body {
   margin-top: 0.15rem;
 }
 
+/* ── Sortable headers ──────────────────────────────────────────────── */
+.sortable {
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s;
+}
+
+.sortable:hover {
+  color: var(--text-primary);
+}
+
+.sortable.sort-active {
+  color: var(--yellow);
+}
+
+.sort-arrow::after {
+  content: '';
+}
+
+.sort-active .sort-arrow::after {
+  content: ' ▼';
+  font-size: 0.6rem;
+}
+
 /* ── Map rank prefix ───────────────────────────────────────────────── */
 .map-rank {
   color: var(--text-dim);
