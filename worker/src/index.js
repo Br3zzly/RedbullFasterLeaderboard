@@ -53,7 +53,7 @@ async function authenticateOAuth(clientId, clientSecret) {
   return (await res.json()).access_token;
 }
 
-// ── Leaderboard fetching (captures position, timestamp, zoneId) ──────
+// ── Leaderboard fetching ─────────────────────────────────────────────
 async function fetchMapLeaderboard(mapUid, token) {
   const allRecords = [];
   for (let page = 0; page < MAX_PAGES; page++) {
@@ -93,100 +93,88 @@ async function fetchZones(coreToken) {
   return await res.json();
 }
 
-// Build zone lookup and country resolver from zones hierarchy
 function buildZoneLookup(zones) {
-  if (!zones || !Array.isArray(zones)) return { lookup: {}, getCountry: () => null };
+  if (!zones || !Array.isArray(zones)) return { getCountryIso: () => null };
 
   const lookup = {};
   for (const z of zones) {
-    lookup[z.zoneId] = { name: z.name, parentId: z.parentId, icon: z.icon || '' };
+    lookup[z.zoneId] = { name: z.name, parentId: z.parentId };
   }
 
-  // Find World zone ID (top-level, parentId is null or not present)
   let worldId = null;
   for (const z of zones) {
     if (!z.parentId) { worldId = z.zoneId; break; }
   }
 
-  // Continent IDs are direct children of World
   const continentIds = new Set();
   for (const z of zones) {
     if (z.parentId === worldId) continentIds.add(z.zoneId);
   }
 
-  // Country = zone whose parent is a continent
-  function getCountryForZone(zoneId) {
+  function getCountryName(zoneId) {
     let current = zoneId;
     const visited = new Set();
     while (current && !visited.has(current)) {
       visited.add(current);
       const zone = lookup[current];
       if (!zone) return null;
-      if (continentIds.has(zone.parentId)) {
-        // This zone's parent is a continent, so this is a country
-        return zone.name;
-      }
+      if (continentIds.has(zone.parentId)) return zone.name;
       current = zone.parentId;
     }
     return null;
   }
 
-  return { lookup, getCountry: getCountryForZone };
+  function getCountryIso(zoneId) {
+    const name = getCountryName(zoneId);
+    if (!name) return null;
+    return COUNTRY_TO_ISO[name] || null;
+  }
+
+  return { getCountryIso };
 }
 
-// Map country names to ISO 3166-1 alpha-2 codes
 const COUNTRY_TO_ISO = {
-  'Afghanistan': 'AF', 'Albania': 'AL', 'Algeria': 'DZ', 'Andorra': 'AD',
-  'Angola': 'AO', 'Argentina': 'AR', 'Armenia': 'AM', 'Australia': 'AU',
-  'Austria': 'AT', 'Azerbaijan': 'AZ', 'Bahamas': 'BS', 'Bahrain': 'BH',
-  'Bangladesh': 'BD', 'Belarus': 'BY', 'Belgium': 'BE', 'Belize': 'BZ',
-  'Bolivia': 'BO', 'Bosnia & Herzegovina': 'BA', 'Bosnia and Herzegovina': 'BA',
-  'Brazil': 'BR', 'Brunei': 'BN', 'Bulgaria': 'BG', 'Cambodia': 'KH',
-  'Cameroon': 'CM', 'Canada': 'CA', 'Chile': 'CL', 'China': 'CN',
-  'Colombia': 'CO', 'Costa Rica': 'CR', 'Croatia': 'HR', 'Cuba': 'CU',
-  'Cyprus': 'CY', 'Czech Republic': 'CZ', 'Czechia': 'CZ',
-  'Denmark': 'DK', 'Dominican Republic': 'DO', 'Ecuador': 'EC',
-  'Egypt': 'EG', 'El Salvador': 'SV', 'Estonia': 'EE', 'Ethiopia': 'ET',
-  'Finland': 'FI', 'France': 'FR', 'Georgia': 'GE', 'Germany': 'DE',
-  'Ghana': 'GH', 'Greece': 'GR', 'Guatemala': 'GT', 'Honduras': 'HN',
-  'Hong Kong': 'HK', 'Hungary': 'HU', 'Iceland': 'IS', 'India': 'IN',
-  'Indonesia': 'ID', 'Iran': 'IR', 'Iraq': 'IQ', 'Ireland': 'IE',
-  'Israel': 'IL', 'Italy': 'IT', 'Jamaica': 'JM', 'Japan': 'JP',
-  'Jordan': 'JO', 'Kazakhstan': 'KZ', 'Kenya': 'KE', 'Kosovo': 'XK',
-  'Kuwait': 'KW', 'Kyrgyzstan': 'KG', 'Latvia': 'LV', 'Lebanon': 'LB',
-  'Libya': 'LY', 'Liechtenstein': 'LI', 'Lithuania': 'LT',
-  'Luxembourg': 'LU', 'Macao': 'MO', 'Macau': 'MO', 'Madagascar': 'MG',
-  'Malaysia': 'MY', 'Malta': 'MT', 'Mauritius': 'MU', 'Mexico': 'MX',
-  'Moldova': 'MD', 'Monaco': 'MC', 'Mongolia': 'MN', 'Montenegro': 'ME',
-  'Morocco': 'MA', 'Mozambique': 'MZ', 'Myanmar': 'MM', 'Namibia': 'NA',
-  'Nepal': 'NP', 'Netherlands': 'NL', 'New Zealand': 'NZ',
-  'Nicaragua': 'NI', 'Nigeria': 'NG', 'North Macedonia': 'MK',
-  'Norway': 'NO', 'Oman': 'OM', 'Pakistan': 'PK', 'Palestine': 'PS',
-  'Panama': 'PA', 'Paraguay': 'PY', 'Peru': 'PE', 'Philippines': 'PH',
-  'Poland': 'PL', 'Portugal': 'PT', 'Puerto Rico': 'PR', 'Qatar': 'QA',
-  'Romania': 'RO', 'Russia': 'RU', 'Rwanda': 'RW', 'Saudi Arabia': 'SA',
-  'Senegal': 'SN', 'Serbia': 'RS', 'Singapore': 'SG', 'Slovakia': 'SK',
-  'Slovenia': 'SI', 'South Africa': 'ZA', 'South Korea': 'KR',
-  'Spain': 'ES', 'Sri Lanka': 'LK', 'Sweden': 'SE', 'Switzerland': 'CH',
-  'Syria': 'SY', 'Taiwan': 'TW', 'Thailand': 'TH', 'Trinidad and Tobago': 'TT',
-  'Tunisia': 'TN', 'Turkey': 'TR', 'Türkiye': 'TR', 'Ukraine': 'UA',
-  'United Arab Emirates': 'AE', 'United Kingdom': 'GB',
-  'United States': 'US', 'Uruguay': 'UY', 'Uzbekistan': 'UZ',
-  'Venezuela': 'VE', 'Vietnam': 'VN', 'Réunion': 'RE',
-  'Guadeloupe': 'GP', 'Martinique': 'MQ', 'French Guiana': 'GF',
-  'New Caledonia': 'NC', 'French Polynesia': 'PF', 'Mayotte': 'YT',
+  'Afghanistan': 'af', 'Albania': 'al', 'Algeria': 'dz', 'Andorra': 'ad',
+  'Angola': 'ao', 'Argentina': 'ar', 'Armenia': 'am', 'Australia': 'au',
+  'Austria': 'at', 'Azerbaijan': 'az', 'Bahamas': 'bs', 'Bahrain': 'bh',
+  'Bangladesh': 'bd', 'Belarus': 'by', 'Belgium': 'be', 'Belize': 'bz',
+  'Bolivia': 'bo', 'Bosnia & Herzegovina': 'ba', 'Bosnia and Herzegovina': 'ba',
+  'Brazil': 'br', 'Brunei': 'bn', 'Bulgaria': 'bg', 'Cambodia': 'kh',
+  'Cameroon': 'cm', 'Canada': 'ca', 'Chile': 'cl', 'China': 'cn',
+  'Colombia': 'co', 'Costa Rica': 'cr', 'Croatia': 'hr', 'Cuba': 'cu',
+  'Cyprus': 'cy', 'Czech Republic': 'cz', 'Czechia': 'cz',
+  'Denmark': 'dk', 'Dominican Republic': 'do', 'Ecuador': 'ec',
+  'Egypt': 'eg', 'El Salvador': 'sv', 'Estonia': 'ee', 'Ethiopia': 'et',
+  'Finland': 'fi', 'France': 'fr', 'Georgia': 'ge', 'Germany': 'de',
+  'Ghana': 'gh', 'Greece': 'gr', 'Guatemala': 'gt', 'Honduras': 'hn',
+  'Hong Kong': 'hk', 'Hungary': 'hu', 'Iceland': 'is', 'India': 'in',
+  'Indonesia': 'id', 'Iran': 'ir', 'Iraq': 'iq', 'Ireland': 'ie',
+  'Israel': 'il', 'Italy': 'it', 'Jamaica': 'jm', 'Japan': 'jp',
+  'Jordan': 'jo', 'Kazakhstan': 'kz', 'Kenya': 'ke', 'Kosovo': 'xk',
+  'Kuwait': 'kw', 'Kyrgyzstan': 'kg', 'Latvia': 'lv', 'Lebanon': 'lb',
+  'Libya': 'ly', 'Liechtenstein': 'li', 'Lithuania': 'lt',
+  'Luxembourg': 'lu', 'Macao': 'mo', 'Macau': 'mo', 'Madagascar': 'mg',
+  'Malaysia': 'my', 'Malta': 'mt', 'Mauritius': 'mu', 'Mexico': 'mx',
+  'Moldova': 'md', 'Monaco': 'mc', 'Mongolia': 'mn', 'Montenegro': 'me',
+  'Morocco': 'ma', 'Mozambique': 'mz', 'Myanmar': 'mm', 'Namibia': 'na',
+  'Nepal': 'np', 'Netherlands': 'nl', 'New Zealand': 'nz',
+  'Nicaragua': 'ni', 'Nigeria': 'ng', 'North Macedonia': 'mk',
+  'Norway': 'no', 'Oman': 'om', 'Pakistan': 'pk', 'Palestine': 'ps',
+  'Panama': 'pa', 'Paraguay': 'py', 'Peru': 'pe', 'Philippines': 'ph',
+  'Poland': 'pl', 'Portugal': 'pt', 'Puerto Rico': 'pr', 'Qatar': 'qa',
+  'Romania': 'ro', 'Russia': 'ru', 'Rwanda': 'rw', 'Saudi Arabia': 'sa',
+  'Senegal': 'sn', 'Serbia': 'rs', 'Singapore': 'sg', 'Slovakia': 'sk',
+  'Slovenia': 'si', 'South Africa': 'za', 'South Korea': 'kr',
+  'Spain': 'es', 'Sri Lanka': 'lk', 'Sweden': 'se', 'Switzerland': 'ch',
+  'Syria': 'sy', 'Taiwan': 'tw', 'Thailand': 'th', 'Trinidad and Tobago': 'tt',
+  'Tunisia': 'tn', 'Turkey': 'tr', 'Türkiye': 'tr', 'Ukraine': 'ua',
+  'United Arab Emirates': 'ae', 'United Kingdom': 'gb',
+  'United States': 'us', 'Uruguay': 'uy', 'Uzbekistan': 'uz',
+  'Venezuela': 've', 'Vietnam': 'vn', 'Réunion': 're',
+  'Guadeloupe': 'gp', 'Martinique': 'mq', 'French Guiana': 'gf',
+  'New Caledonia': 'nc', 'French Polynesia': 'pf', 'Mayotte': 'yt',
   'Other Countries': null,
 };
-
-function countryToFlag(countryName) {
-  if (!countryName) return null;
-  const iso = COUNTRY_TO_ISO[countryName];
-  if (!iso) return null;
-  // Convert ISO code to flag emoji (regional indicator symbols)
-  return String.fromCodePoint(
-    ...iso.split('').map(c => 0x1F1E6 + c.charCodeAt(0) - 65)
-  );
-}
 
 // ── Display names (OAuth API) ─────────────────────────────────────────
 async function fetchDisplayNames(accountIds, oauthToken) {
@@ -216,7 +204,6 @@ async function fetchDisplayNames(accountIds, oauthToken) {
 
 // ── Aggregation ───────────────────────────────────────────────────────
 function aggregateLeaderboard(map1Records, map2Records, map3Records, zoneResolver) {
-  // Build lookups: accountId -> { score, position, timestamp, zoneId }
   const buildLookup = (records) => {
     const m = new Map();
     for (const r of records) {
@@ -245,44 +232,35 @@ function aggregateLeaderboard(map1Records, map2Records, map3Records, zoneResolve
     const t1 = r1?.score ?? null;
     const t2 = r2?.score ?? null;
     const t3 = r3?.score ?? null;
-    const hasAll = t1 !== null && t2 !== null && t3 !== null;
-    const total = hasAll ? t1 + t2 + t3 : null;
 
-    // Get the most recent timestamp across all maps for "last improved"
+    // Sum all available times for sorting
+    const mapCount = (t1 !== null ? 1 : 0) + (t2 !== null ? 1 : 0) + (t3 !== null ? 1 : 0);
+    const sumTime = (t1 ?? 0) + (t2 ?? 0) + (t3 ?? 0);
+
     const timestamps = [r1?.timestamp, r2?.timestamp, r3?.timestamp].filter(Boolean);
     const lastImproved = timestamps.length > 0 ? Math.max(...timestamps) : null;
 
-    // Get zone from whichever map record exists
     const zoneId = r1?.zoneId || r2?.zoneId || r3?.zoneId || null;
-    const country = zoneResolver ? zoneResolver(zoneId) : null;
+    const countryIso = zoneResolver ? zoneResolver(zoneId) : null;
 
     entries.push({
       accountId: id,
       map1Time: t1, map1Rank: r1?.position ?? null,
       map2Time: t2, map2Rank: r2?.position ?? null,
       map3Time: t3, map3Rank: r3?.position ?? null,
-      totalTime: total, hasAll, lastImproved,
-      country: country,
-      countryFlag: countryToFlag(country),
+      sumTime, mapCount, lastImproved, countryIso,
     });
   }
 
-  // Sort
+  // Sort: more maps first, then by sum of available times
   entries.sort((a, b) => {
-    if (a.hasAll && !b.hasAll) return -1;
-    if (!a.hasAll && b.hasAll) return 1;
-    if (a.hasAll && b.hasAll) return a.totalTime - b.totalTime;
-    const aCount = (a.map1Time !== null ? 1 : 0) + (a.map2Time !== null ? 1 : 0) + (a.map3Time !== null ? 1 : 0);
-    const bCount = (b.map1Time !== null ? 1 : 0) + (b.map2Time !== null ? 1 : 0) + (b.map3Time !== null ? 1 : 0);
-    if (aCount !== bCount) return bCount - aCount;
-    const aSum = (a.map1Time ?? 0) + (a.map2Time ?? 0) + (a.map3Time ?? 0);
-    const bSum = (b.map1Time ?? 0) + (b.map2Time ?? 0) + (b.map3Time ?? 0);
-    return aSum - bSum;
+    if (a.mapCount !== b.mapCount) return b.mapCount - a.mapCount;
+    return a.sumTime - b.sumTime;
   });
 
-  let rank = 1;
-  for (const entry of entries) {
-    entry.rank = entry.hasAll ? rank++ : null;
+  // Assign ranks to everyone
+  for (let i = 0; i < entries.length; i++) {
+    entries[i].rank = i + 1;
   }
 
   return entries;
@@ -318,21 +296,18 @@ export default {
       return jsonResponse({ error: 'Not found' }, 404);
     }
 
-    // Check cache first — all users share this cached response
     const cache = caches.default;
     const cacheKey = new Request(new URL('/leaderboard', request.url).toString());
     const cached = await cache.match(cacheKey);
     if (cached) return cached;
 
     try {
-      // Authenticate: Nadeo Live + Nadeo Core (zones) + OAuth (names) in parallel
       const [liveToken, coreToken, oauthToken] = await Promise.all([
         authenticateNadeo(env.NADEO_LOGIN, env.NADEO_PASSWORD, 'NadeoLiveServices'),
         authenticateNadeo(env.NADEO_LOGIN, env.NADEO_PASSWORD, 'NadeoServices'),
         authenticateOAuth(env.OAUTH_CLIENT_ID, env.OAUTH_CLIENT_SECRET),
       ]);
 
-      // Fetch leaderboards + zones in parallel
       const mapUids = MAPS.map(m => env[m.uidKey]);
       const mapNames = MAPS.map(m => env[m.nameKey]);
 
@@ -343,27 +318,22 @@ export default {
         fetchZones(coreToken),
       ]);
 
-      // Build zone resolver
-      const { getCountry } = buildZoneLookup(zones);
+      const { getCountryIso } = buildZoneLookup(zones);
+      const entries = aggregateLeaderboard(map1Records, map2Records, map3Records, getCountryIso);
 
-      // Aggregate with map ranks, timestamps, and country data
-      const entries = aggregateLeaderboard(map1Records, map2Records, map3Records, getCountry);
-
-      // Fetch display names
       const allAccountIds = entries.map(e => e.accountId);
       const displayNames = await fetchDisplayNames(allAccountIds, oauthToken);
 
-      // Build final response
       const leaderboard = entries.map(e => ({
         rank: e.rank,
         playerName: displayNames[e.accountId] || e.accountId,
         accountId: e.accountId,
-        countryFlag: e.countryFlag,
-        country: e.country,
+        countryIso: e.countryIso,
         map1Time: e.map1Time, map1Rank: e.map1Rank,
         map2Time: e.map2Time, map2Rank: e.map2Rank,
         map3Time: e.map3Time, map3Rank: e.map3Rank,
-        totalTime: e.totalTime,
+        sumTime: e.sumTime,
+        mapCount: e.mapCount,
         lastImproved: e.lastImproved,
       }));
 
@@ -372,7 +342,6 @@ export default {
         mapNames,
         lastUpdated: new Date().toISOString(),
         totalPlayers: leaderboard.length,
-        rankedPlayers: leaderboard.filter(e => e.rank !== null).length,
       };
 
       const response = jsonResponse(responseData);

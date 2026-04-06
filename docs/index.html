@@ -24,7 +24,7 @@
     <div class="status-bar">
       <div class="status-left">
         <span class="player-count" id="playerCount">—</span>
-        <span class="status-label">players ranked</span>
+        <span class="status-label">players</span>
       </div>
       <div class="status-center">
         <input type="text" id="searchInput" class="search-input" placeholder="Search player...">
@@ -57,6 +57,10 @@
         </thead>
         <tbody id="leaderboardBody"></tbody>
       </table>
+      <div id="loadMoreWrap" class="load-more-wrap" style="display:none">
+        <button id="loadMoreBtn" class="load-more-btn">Load More</button>
+        <span id="loadMoreInfo" class="load-more-info"></span>
+      </div>
     </div>
   </main>
 
