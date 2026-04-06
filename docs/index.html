@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Red Bull FASTER — Leaderboard</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="bg-glow"></div>
+
+  <header class="header">
+    <div class="header-content">
+      <div class="event-badge">TRACKMANIA</div>
+      <h1 class="title">RED BULL <span class="title-accent">FASTER</span></h1>
+      <p class="subtitle">COMBINED LEADERBOARD</p>
+    </div>
+  </header>
+
+  <main class="main">
+    <div class="status-bar">
+      <div class="status-left">
+        <span class="player-count" id="playerCount">—</span>
+        <span class="status-label">players ranked</span>
+      </div>
+      <div class="status-right">
+        <span class="refresh-dot" id="refreshDot"></span>
+        <span class="status-label">Auto-refresh in <span id="countdown">60</span>s</span>
+        <span class="divider">|</span>
+        <span class="status-label">Updated <span id="lastUpdated">—</span></span>
+      </div>
+    </div>
+
+    <div class="table-wrapper">
+      <div id="loading" class="loading">
+        <div class="spinner"></div>
+        <p>Loading leaderboard data...</p>
+      </div>
+      <div id="error" class="error" style="display:none"></div>
+      <table id="leaderboard" class="leaderboard" style="display:none">
+        <thead>
+          <tr>
+            <th class="col-rank">#</th>
+            <th class="col-player">Player</th>
+            <th class="col-time" id="mapHeader1">Map 1</th>
+            <th class="col-time" id="mapHeader2">Map 2</th>
+            <th class="col-time" id="mapHeader3">Map 3</th>
+            <th class="col-total">Total</th>
+          </tr>
+        </thead>
+        <tbody id="leaderboardBody"></tbody>
+      </table>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <p>Data sourced from Nadeo Live Services. Not affiliated with Red Bull or Ubisoft Nadeo.</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

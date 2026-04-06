@@ -1,0 +1,16 @@
+name = "redbull-faster-leaderboard"
+main = "src/index.js"
+compatibility_date = "2024-12-01"
+
+[vars]
+# Map UIDs (public, safe to commit)
+MAP1_UID = "ne1uhbsWhrUBuveYEx9p08C23Dm"
+MAP2_UID = "eLEM0x9TFwpHqnjMPHoesoXTiwk"
+MAP3_UID = "SULHiiCvz0g0oIGp1uAyqkLFPoh"
+MAP1_NAME = "FASTER OBSTACLE"
+MAP2_NAME = "FASTER EVEREST"
+MAP3_NAME = "FASTER SKATE"
+
+# Secrets (set via `wrangler secret put`):
+# NADEO_LOGIN
+# NADEO_PASSWORD
