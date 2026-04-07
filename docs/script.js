@@ -126,19 +126,10 @@ function setSort(mode) {
 function updateHeaderStyles() {
   [$mapHeader1, $mapHeader2, $mapHeader3, $totalHeader].forEach(h => h.classList.remove('sort-active'));
 
-  if (sortMode === 'map1') {
-    $mapHeader1.classList.add('sort-active');
-    $rankHeader.textContent = mapNames[0] + ' #';
-  } else if (sortMode === 'map2') {
-    $mapHeader2.classList.add('sort-active');
-    $rankHeader.textContent = mapNames[1] + ' #';
-  } else if (sortMode === 'map3') {
-    $mapHeader3.classList.add('sort-active');
-    $rankHeader.textContent = mapNames[2] + ' #';
-  } else {
-    $totalHeader.classList.add('sort-active');
-    $rankHeader.textContent = '#';
-  }
+  if (sortMode === 'map1') $mapHeader1.classList.add('sort-active');
+  else if (sortMode === 'map2') $mapHeader2.classList.add('sort-active');
+  else if (sortMode === 'map3') $mapHeader3.classList.add('sort-active');
+  else $totalHeader.classList.add('sort-active');
 }
 
 // ── Build a single row ────────────────────────────────────────────────
@@ -146,7 +137,7 @@ function buildRow(e, bestTime) {
   const tr = document.createElement('tr');
   tr.dataset.playerName = (e.name || '').toLowerCase();
 
-  const dr = e._dr ?? e.rank;
+  const dr = e.rank;
 
   if (dr === 1) tr.className = 'top-1';
   else if (dr === 2) tr.className = 'top-2';
