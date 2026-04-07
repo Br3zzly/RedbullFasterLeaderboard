@@ -8,7 +8,6 @@ const $loading = document.getElementById('loading');
 const $error = document.getElementById('error');
 const $table = document.getElementById('leaderboard');
 const $tbody = document.getElementById('leaderboardBody');
-const $countdown = document.getElementById('countdown');
 const $lastUpdated = document.getElementById('lastUpdated');
 const $playerCount = document.getElementById('playerCount');
 const $refreshDot = document.getElementById('refreshDot');
@@ -22,8 +21,6 @@ const $loadMoreWrap = document.getElementById('loadMoreWrap');
 const $loadMoreBtn = document.getElementById('loadMoreBtn');
 const $loadMoreInfo = document.getElementById('loadMoreInfo');
 
-let countdownTimer = null;
-let secondsLeft = REFRESH_INTERVAL;
 let currentData = null;
 let sortedData = null;
 let visibleCount = PAGE_SIZE;
@@ -193,7 +190,8 @@ function renderLeaderboard(data) {
   }
 
   $playerCount.textContent = currentData.totalPlayers;
-  $lastUpdated.textContent = currentData.lastUpdated ? timeAgo(currentData.lastUpdated) : '—';
+  lastFetchTime = Date.now();
+  $lastUpdated.textContent = '0s ago';
 
   sortedData = getSortedData();
   updateHeaderStyles();
@@ -202,7 +200,11 @@ function renderLeaderboard(data) {
   $error.style.display = 'none';
   $table.style.display = 'table';
 
-  renderVisible();
+  if ($searchInput.value.trim()) {
+    applySearch();
+  } else {
+    renderVisible();
+  }
 }
 
 function getBestTime() {
@@ -333,21 +335,32 @@ async function fetchLeaderboard() {
   }
 }
 
-// ── Countdown & auto-refresh ──────────────────────────────────────────
-function startCountdown() {
-  secondsLeft = REFRESH_INTERVAL;
-  $countdown.textContent = secondsLeft;
+// ── Auto-refresh & updated ticker ────────────────────────────────────
+let lastFetchTime = null;
+let refreshTimer = null;
+let tickTimer = null;
 
-  if (countdownTimer) clearInterval(countdownTimer);
-  countdownTimer = setInterval(() => {
-    secondsLeft--;
-    $countdown.textContent = Math.max(0, secondsLeft);
-    if (secondsLeft <= 0) {
-      fetchLeaderboard();
-      secondsLeft = REFRESH_INTERVAL;
+function startRefreshCycle() {
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(async () => {
+    clearInterval(refreshTimer);
+    await fetchLeaderboard();
+    startRefreshCycle();
+  }, REFRESH_INTERVAL * 1000);
+}
+
+function startUpdatedTicker() {
+  if (tickTimer) clearInterval(tickTimer);
+  tickTimer = setInterval(() => {
+    if (lastFetchTime) {
+      const secs = Math.floor((Date.now() - lastFetchTime) / 10000) * 10;
+      $lastUpdated.textContent = `${secs}s ago`;
     }
-  }, 1000);
+  }, 10000);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────
-fetchLeaderboard().then(startCountdown);
+fetchLeaderboard().then(() => {
+  startRefreshCycle();
+  startUpdatedTicker();
+});
