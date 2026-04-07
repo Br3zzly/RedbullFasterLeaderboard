@@ -341,9 +341,69 @@ function jsonResponse(data, status = 200) {
   });
 }
 
+// ── Build fresh leaderboard and store in cache ──────────────────────
+async function buildAndCacheResponse(env, cache, cacheKey) {
+  const [liveToken, coreToken, oauthToken] = await Promise.all([
+    authenticateNadeo(env.NADEO_LOGIN, env.NADEO_PASSWORD, 'NadeoLiveServices'),
+    authenticateNadeo(env.NADEO_LOGIN, env.NADEO_PASSWORD, 'NadeoServices'),
+    authenticateOAuth(env.OAUTH_CLIENT_ID, env.OAUTH_CLIENT_SECRET),
+  ]);
+
+  const mapUids = MAPS.map(m => env[m.uidKey]);
+  const mapNames = MAPS.map(m => env[m.nameKey]);
+
+  const [map1Records, map2Records, map3Records, zones] = await Promise.all([
+    fetchMapLeaderboard(mapUids[0], liveToken),
+    fetchMapLeaderboard(mapUids[1], liveToken),
+    fetchMapLeaderboard(mapUids[2], liveToken),
+    fetchZones(coreToken),
+  ]);
+
+  const { getCountryIso } = buildZoneLookup(zones);
+  const entries = aggregateLeaderboard(map1Records, map2Records, map3Records, getCountryIso);
+
+  const allAccountIds = entries.map(e => e.accountId);
+  const displayNames = await fetchDisplayNames(allAccountIds, oauthToken, env.DISPLAY_NAMES);
+
+  const leaderboard = entries.map(e => ({
+    r: e.rank,
+    n: displayNames[e.accountId] || e.accountId,
+    f: e.countryIso,
+    t1: e.map1Time, r1: e.map1Rank,
+    t2: e.map2Time, r2: e.map2Rank,
+    t3: e.map3Time, r3: e.map3Rank,
+    s: e.sumTime,
+    mc: e.mapCount,
+    li: e.lastImproved,
+  }));
+
+  const responseData = {
+    l: leaderboard,
+    mn: mapNames,
+    lu: new Date().toISOString(),
+    tp: leaderboard.length,
+  };
+
+  const response = jsonResponse(responseData);
+  const cachedResponse = new Response(response.body, response);
+  cachedResponse.headers.set('Cache-Control', 'public, max-age=120');
+  await cache.put(cacheKey, cachedResponse.clone());
+
+  return cachedResponse;
+}
+
+// ── Background refresh (only if cache is older than 60s) ─────────────
+async function refreshCache(env, cache, cacheKey) {
+  try {
+    await buildAndCacheResponse(env, cache, cacheKey);
+  } catch (err) {
+    console.error('Background refresh error:', err);
+  }
+}
+
 // ── Main handler ──────────────────────────────────────────────────────
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: CORS_HEADERS });
     }
@@ -356,58 +416,16 @@ export default {
     const cache = caches.default;
     const cacheKey = new Request(new URL('/leaderboard', request.url).toString());
     const cached = await cache.match(cacheKey);
-    if (cached) return cached;
 
+    // Always serve cache immediately if available; refresh in background
+    if (cached) {
+      ctx.waitUntil(refreshCache(env, cache, cacheKey));
+      return cached;
+    }
+
+    // No cache at all — must wait for fresh data
     try {
-      const [liveToken, coreToken, oauthToken] = await Promise.all([
-        authenticateNadeo(env.NADEO_LOGIN, env.NADEO_PASSWORD, 'NadeoLiveServices'),
-        authenticateNadeo(env.NADEO_LOGIN, env.NADEO_PASSWORD, 'NadeoServices'),
-        authenticateOAuth(env.OAUTH_CLIENT_ID, env.OAUTH_CLIENT_SECRET),
-      ]);
-
-      const mapUids = MAPS.map(m => env[m.uidKey]);
-      const mapNames = MAPS.map(m => env[m.nameKey]);
-
-      const [map1Records, map2Records, map3Records, zones] = await Promise.all([
-        fetchMapLeaderboard(mapUids[0], liveToken),
-        fetchMapLeaderboard(mapUids[1], liveToken),
-        fetchMapLeaderboard(mapUids[2], liveToken),
-        fetchZones(coreToken),
-      ]);
-
-      const { getCountryIso } = buildZoneLookup(zones);
-      const entries = aggregateLeaderboard(map1Records, map2Records, map3Records, getCountryIso);
-
-      const allAccountIds = entries.map(e => e.accountId);
-      const displayNames = await fetchDisplayNames(allAccountIds, oauthToken, env.DISPLAY_NAMES);
-
-      // Short keys to minimize JSON size (~4MB → ~2MB)
-      // r=rank, n=name, f=flag, t1/t2/t3=mapTimes, r1/r2/r3=mapRanks, s=sum, mc=mapCount, li=lastImproved
-      const leaderboard = entries.map(e => ({
-        r: e.rank,
-        n: displayNames[e.accountId] || e.accountId,
-        f: e.countryIso,
-        t1: e.map1Time, r1: e.map1Rank,
-        t2: e.map2Time, r2: e.map2Rank,
-        t3: e.map3Time, r3: e.map3Rank,
-        s: e.sumTime,
-        mc: e.mapCount,
-        li: e.lastImproved,
-      }));
-
-      const responseData = {
-        l: leaderboard,
-        mn: mapNames,
-        lu: new Date().toISOString(),
-        tp: leaderboard.length,
-      };
-
-      const response = jsonResponse(responseData);
-      const cachedResponse = new Response(response.body, response);
-      cachedResponse.headers.set('Cache-Control', 'public, max-age=60');
-      await cache.put(cacheKey, cachedResponse.clone());
-
-      return cachedResponse;
+      return await buildAndCacheResponse(env, cache, cacheKey);
     } catch (err) {
       console.error('Worker error:', err);
       return jsonResponse({ error: err.message }, 500);
