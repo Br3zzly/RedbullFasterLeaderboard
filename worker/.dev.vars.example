@@ -1,0 +1,4 @@
+NADEO_LOGIN=your-service-account-login
+NADEO_PASSWORD=your-service-account-password
+OAUTH_CLIENT_ID=your-oauth-client-id
+OAUTH_CLIENT_SECRET=your-oauth-client-secret
