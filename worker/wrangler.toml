@@ -2,6 +2,10 @@ name = "redbull-faster-leaderboard"
 main = "src/index.js"
 compatibility_date = "2024-12-01"
 
+# Rebuild and write to KV every 2 min so requests never wait on Nadeo.
+[triggers]
+crons = ["*/2 * * * *"]
+
 [vars]
 # Map UIDs (public, safe to commit)
 MAP1_UID = "ne1uhbsWhrUBuveYEx9p08C23Dm"

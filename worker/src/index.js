@@ -12,6 +12,8 @@ const TM_DISPLAY_NAMES_URL = 'https://api.trackmania.com/api/display-names';
 const USER_AGENT = 'redbull-faster-leaderboard / cloudflare-worker';
 const PAGE_SIZE = 100;
 const MAX_PAGES = 200; // 20000 players per map max
+const PAGE_CONCURRENCY = 10; // Pages fetched in parallel per map
+const KV_LEADERBOARD_KEY = 'leaderboard:v1';
 
 // ── Nadeo Auth ────────────────────────────────────────────────────────
 async function authenticateNadeo(login, password, audience) {
@@ -54,26 +56,44 @@ async function authenticateOAuth(clientId, clientSecret) {
 }
 
 // ── Leaderboard fetching ─────────────────────────────────────────────
+async function fetchPage(mapUid, token, offset) {
+  const url = `${NADEO_LIVE_URL}/api/token/leaderboard/group/Personal_Best/map/${mapUid}/top?length=${PAGE_SIZE}&onlyWorld=true&offset=${offset}`;
+  const res = await fetch(url, {
+    headers: {
+      'Authorization': `nadeo_v1 t=${token}`,
+      'User-Agent': USER_AGENT,
+    },
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Leaderboard fetch failed: ${res.status} ${text}`);
+  }
+  const data = await res.json();
+  return data.tops?.[0]?.top || [];
+}
+
+// Fetch pages in parallel batches — ~10 round-trips instead of ~100.
 async function fetchMapLeaderboard(mapUid, token) {
   const allRecords = [];
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const offset = page * PAGE_SIZE;
-    const url = `${NADEO_LIVE_URL}/api/token/leaderboard/group/Personal_Best/map/${mapUid}/top?length=${PAGE_SIZE}&onlyWorld=true&offset=${offset}`;
-    const res = await fetch(url, {
-      headers: {
-        'Authorization': `nadeo_v1 t=${token}`,
-        'User-Agent': USER_AGENT,
-      },
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Leaderboard fetch failed: ${res.status} ${text}`);
+  let page = 0;
+
+  while (page < MAX_PAGES) {
+    const batchSize = Math.min(PAGE_CONCURRENCY, MAX_PAGES - page);
+    const batch = [];
+    for (let i = 0; i < batchSize; i++) {
+      batch.push(fetchPage(mapUid, token, (page + i) * PAGE_SIZE));
     }
-    const data = await res.json();
-    const tops = data.tops?.[0]?.top || [];
-    allRecords.push(...tops);
-    if (tops.length < PAGE_SIZE) break;
+    const results = await Promise.all(batch);
+
+    let hitEnd = false;
+    for (const tops of results) {
+      allRecords.push(...tops);
+      if (tops.length < PAGE_SIZE) { hitEnd = true; break; }
+    }
+    if (hitEnd) break;
+    page += batchSize;
   }
+
   return allRecords;
 }
 
@@ -341,13 +361,16 @@ function jsonResponse(data, status = 200) {
   });
 }
 
-// ── Build fresh leaderboard and store in cache ──────────────────────
-async function buildAndCacheResponse(env, cache, cacheKey) {
+// ── Build fresh leaderboard data ─────────────────────────────────────
+async function buildLeaderboard(env) {
+  const t0 = Date.now();
+
   const [liveToken, coreToken, oauthToken] = await Promise.all([
     authenticateNadeo(env.NADEO_LOGIN, env.NADEO_PASSWORD, 'NadeoLiveServices'),
     authenticateNadeo(env.NADEO_LOGIN, env.NADEO_PASSWORD, 'NadeoServices'),
     authenticateOAuth(env.OAUTH_CLIENT_ID, env.OAUTH_CLIENT_SECRET),
   ]);
+  const tAuth = Date.now();
 
   const mapUids = MAPS.map(m => env[m.uidKey]);
   const mapNames = MAPS.map(m => env[m.nameKey]);
@@ -358,12 +381,14 @@ async function buildAndCacheResponse(env, cache, cacheKey) {
     fetchMapLeaderboard(mapUids[2], liveToken),
     fetchZones(coreToken),
   ]);
+  const tMaps = Date.now();
 
   const { getCountryIso } = buildZoneLookup(zones);
   const entries = aggregateLeaderboard(map1Records, map2Records, map3Records, getCountryIso);
 
   const allAccountIds = entries.map(e => e.accountId);
   const displayNames = await fetchDisplayNames(allAccountIds, oauthToken, env.DISPLAY_NAMES);
+  const tNames = Date.now();
 
   const leaderboard = entries.map(e => ({
     r: e.rank,
@@ -377,32 +402,47 @@ async function buildAndCacheResponse(env, cache, cacheKey) {
     li: e.lastImproved,
   }));
 
-  const responseData = {
+  const json = JSON.stringify({
     l: leaderboard,
     mn: mapNames,
     lu: new Date().toISOString(),
     tp: leaderboard.length,
-  };
+  });
 
-  const response = jsonResponse(responseData);
-  const cachedResponse = new Response(response.body, response);
-  cachedResponse.headers.set('Cache-Control', 'public, max-age=120');
-  await cache.put(cacheKey, cachedResponse.clone());
+  const timing = [
+    `auth;dur=${tAuth - t0}`,
+    `maps;dur=${tMaps - tAuth}`,
+    `names;dur=${tNames - tMaps}`,
+    `total;dur=${Date.now() - t0}`,
+  ].join(', ');
 
-  return cachedResponse;
+  return { json, timing };
 }
 
-// ── Background refresh (only if cache is older than 60s) ─────────────
-async function refreshCache(env, cache, cacheKey) {
-  try {
-    await buildAndCacheResponse(env, cache, cacheKey);
-  } catch (err) {
-    console.error('Background refresh error:', err);
-  }
+function wrapResponse(json, extraHeaders = {}) {
+  return new Response(json, {
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'public, max-age=120',
+      ...CORS_HEADERS,
+      ...extraHeaders,
+    },
+  });
 }
 
 // ── Main handler ──────────────────────────────────────────────────────
+// Cron writes to KV every 2 min. Requests read edge cache → KV → live build.
 export default {
+  async scheduled(event, env, ctx) {
+    try {
+      const { json, timing } = await buildLeaderboard(env);
+      await env.DISPLAY_NAMES.put(KV_LEADERBOARD_KEY, json);
+      console.log(`cron: rebuilt leaderboard (${timing})`);
+    } catch (err) {
+      console.error('cron error:', err);
+    }
+  },
+
   async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: CORS_HEADERS });
@@ -413,19 +453,37 @@ export default {
       return jsonResponse({ error: 'Not found' }, 404);
     }
 
+    const nocache = url.searchParams.has('nocache');
     const cache = caches.default;
-    const cacheKey = new Request(new URL('/leaderboard', request.url).toString());
-    const cached = await cache.match(cacheKey);
+    const cacheKey = new Request(new URL('/leaderboard', url.origin).toString());
 
-    // Always serve cache immediately if available; refresh in background
-    if (cached) {
-      ctx.waitUntil(refreshCache(env, cache, cacheKey));
-      return cached;
+    // 1. Edge cache
+    if (!nocache) {
+      const cached = await cache.match(cacheKey);
+      if (cached) {
+        const res = new Response(cached.body, cached);
+        res.headers.set('X-Cache', 'edge');
+        return res;
+      }
     }
 
-    // No cache at all — must wait for fresh data
+    // 2. KV (global)
+    if (!nocache) {
+      const kvJson = await env.DISPLAY_NAMES.get(KV_LEADERBOARD_KEY);
+      if (kvJson) {
+        const res = wrapResponse(kvJson, { 'X-Cache': 'kv' });
+        ctx.waitUntil(cache.put(cacheKey, res.clone()));
+        return res;
+      }
+    }
+
+    // 3. Live build — first deploy, or ?nocache
     try {
-      return await buildAndCacheResponse(env, cache, cacheKey);
+      const { json, timing } = await buildLeaderboard(env);
+      ctx.waitUntil(env.DISPLAY_NAMES.put(KV_LEADERBOARD_KEY, json));
+      const res = wrapResponse(json, { 'X-Cache': 'miss', 'Server-Timing': timing });
+      ctx.waitUntil(cache.put(cacheKey, res.clone()));
+      return res;
     } catch (err) {
       console.error('Worker error:', err);
       return jsonResponse({ error: err.message }, 500);
