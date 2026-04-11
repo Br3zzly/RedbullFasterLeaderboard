@@ -21,8 +21,8 @@ MAP3_NAME = "SKATE"
 # Create with: npx wrangler kv namespace create DISPLAY_NAMES
 # Then paste the id below
 [[kv_namespaces]]
-binding = "DISPLAY_NAMES"
-id = "16d9719b0cc94de891162f56b92f334a"
+binding = "KV_DATA"
+id = "2a6b7a877448484dae91e34284f29aa7"
 
 [triggers]
 crons = ["* * * * *"]

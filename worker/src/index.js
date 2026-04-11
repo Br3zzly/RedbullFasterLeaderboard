@@ -373,14 +373,14 @@ async function buildAndStoreLeaderboard(env) {
     fetchMapLeaderboard(mapUids[0], liveToken),
     fetchMapLeaderboard(mapUids[1], liveToken),
     fetchMapLeaderboard(mapUids[2], liveToken),
-    fetchZones(coreToken, env.DISPLAY_NAMES),
+    fetchZones(coreToken, env.KV_DATA),
   ]);
 
   const { getCountryIso } = buildZoneLookup(zones);
   const entries = aggregateLeaderboard(map1Records, map2Records, map3Records, getCountryIso);
 
   const allAccountIds = entries.map(e => e.accountId);
-  const displayNames = await fetchDisplayNames(allAccountIds, oauthToken, env.DISPLAY_NAMES);
+  const displayNames = await fetchDisplayNames(allAccountIds, oauthToken, env.KV_DATA);
 
   const leaderboard = entries.map(e => ({
     r: e.rank,
@@ -401,7 +401,7 @@ async function buildAndStoreLeaderboard(env) {
     tp: leaderboard.length,
   };
 
-  await env.DISPLAY_NAMES.put('leaderboard', JSON.stringify(responseData));
+  await env.KV_DATA.put('leaderboard', JSON.stringify(responseData));
   console.log(`Leaderboard updated: ${leaderboard.length} players`);
 }
 
@@ -427,7 +427,7 @@ export default {
       return jsonResponse({ error: 'Not found' }, 404);
     }
 
-    const data = await env.DISPLAY_NAMES.get('leaderboard', 'text');
+    const data = await env.KV_DATA.get('leaderboard', 'text');
     if (!data) {
       return jsonResponse({ error: 'Leaderboard not yet available' }, 503);
     }
