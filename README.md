@@ -1,8 +1,9 @@
 # Red Bull FASTER 2026 — Leaderboard
 
-Leaderboard for the Red Bull FASTER 2026 tournament. 
-Displays current time of players on all 3 of the maps (Obstacle, Everest, Skate) + when they last improved one of their times.
-You can search for players and also sort the leaderboard to one map by clicking on the mapname.
+Leaderboard for the Red Bull FASTER 2026 tournament.
+
+Displays current time of players on all 3 of the maps (Obstacle, Everest, Skate) + when they last improved one of their times.  
+You can search for players and also sort the leaderboard to one map by clicking on the mapname.  
 Times are updated every minute.
 
 ![Screenshot](screenshot.png)
