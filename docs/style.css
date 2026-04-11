@@ -345,6 +345,24 @@ body {
 .rank-2 { color: var(--silver); font-weight: 800; }
 .rank-3 { color: var(--bronze); font-weight: 800; }
 
+.leaderboard tbody tr.top-1,
+.leaderboard tbody tr.top-2,
+.leaderboard tbody tr.top-3 {
+  font-size: 0.95rem;
+}
+
+.leaderboard tbody tr.top-1 td,
+.leaderboard tbody tr.top-2 td,
+.leaderboard tbody tr.top-3 td {
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+}
+
+.leaderboard tbody tr.top-1 .col-total {
+  padding-top: 1.35rem;
+  padding-bottom: 1.35rem;
+}
+
 .leaderboard tbody tr.top-1 {
   background: rgba(255, 215, 0, 0.06);
   border-left: 3px solid var(--gold);

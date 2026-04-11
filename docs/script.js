@@ -155,7 +155,7 @@ function buildRow(e, bestTime) {
   let deltaHtml = '';
   if (sortMode === 'total' && dr > 1 && bestTime > 0 && e.mc === 3) {
     const d = formatDelta(e.sum - bestTime);
-    if (d) deltaHtml = `<span class="delta">(${d})</span> `;
+    if (d) deltaHtml = `<span class="delta">(${d})</span>`;
   }
 
   const li = timeAgo(e.li);
