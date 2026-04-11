@@ -80,7 +80,7 @@ function escapeHtml(str) {
 
 function flagImg(iso) {
   if (!iso) return '';
-  return `<img class="player-flag" src="https://flagcdn.com/16x12/${iso}.png" alt="${iso}" loading="lazy" onerror="this.style.display='none'">`;
+  return `<img class="player-flag" src="https://flagcdn.com/${iso}.svg" alt="${iso}" loading="lazy" onerror="this.style.display='none'">`;
 }
 
 // ── Sorting ───────────────────────────────────────────────────────────
