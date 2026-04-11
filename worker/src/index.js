@@ -54,7 +54,7 @@ async function authenticateOAuth(clientId, clientSecret) {
 }
 
 // ── Leaderboard fetching ─────────────────────────────────────────────
-const PARALLEL_PAGES = 10;
+const PARALLEL_PAGES = 2;
 
 async function fetchMapLeaderboard(mapUid, token) {
   const allRecords = [];
