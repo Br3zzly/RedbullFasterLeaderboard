@@ -1,0 +1,4 @@
+NADEO_LOGIN=your_nadeo_service_account_login
+NADEO_PASSWORD=your_nadeo_service_account_password
+OAUTH_CLIENT_ID=your_trackmania_oauth_client_id
+OAUTH_CLIENT_SECRET=your_trackmania_oauth_client_secret
