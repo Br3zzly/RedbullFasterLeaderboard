@@ -23,3 +23,6 @@ MAP3_NAME = "SKATE"
 [[kv_namespaces]]
 binding = "DISPLAY_NAMES"
 id = "16d9719b0cc94de891162f56b92f334a"
+
+[triggers]
+crons = ["* * * * *"]

@@ -77,8 +77,17 @@ async function fetchMapLeaderboard(mapUid, token) {
   return allRecords;
 }
 
-// ── Zones hierarchy ───────────────────────────────────────────────────
-async function fetchZones(coreToken) {
+// ── Zones hierarchy (cached in KV for 24h) ───────────────────────────
+const ZONES_TTL_MS = 24 * 60 * 60 * 1000;
+
+async function fetchZones(coreToken, kvNamespace) {
+  try {
+    const cached = await kvNamespace.get('zones', 'json');
+    if (cached && cached.ts && (Date.now() - cached.ts) < ZONES_TTL_MS) {
+      return cached.data;
+    }
+  } catch {}
+
   const url = `${NADEO_CORE_URL}/zones`;
   const res = await fetch(url, {
     headers: {
@@ -90,7 +99,15 @@ async function fetchZones(coreToken) {
     console.error(`Zones fetch failed: ${res.status}`);
     return null;
   }
-  return await res.json();
+  const data = await res.json();
+
+  try {
+    await kvNamespace.put('zones', JSON.stringify({ data, ts: Date.now() }));
+  } catch (e) {
+    console.error('Zones KV write failed:', e);
+  }
+
+  return data;
 }
 
 function buildZoneLookup(zones) {
@@ -341,8 +358,8 @@ function jsonResponse(data, status = 200) {
   });
 }
 
-// ── Build fresh leaderboard and store in cache ──────────────────────
-async function buildAndCacheResponse(env, cache, cacheKey) {
+// ── Build fresh leaderboard and store in KV ─────────────────────────
+async function buildAndStoreLeaderboard(env) {
   const [liveToken, coreToken, oauthToken] = await Promise.all([
     authenticateNadeo(env.NADEO_LOGIN, env.NADEO_PASSWORD, 'NadeoLiveServices'),
     authenticateNadeo(env.NADEO_LOGIN, env.NADEO_PASSWORD, 'NadeoServices'),
@@ -356,7 +373,7 @@ async function buildAndCacheResponse(env, cache, cacheKey) {
     fetchMapLeaderboard(mapUids[0], liveToken),
     fetchMapLeaderboard(mapUids[1], liveToken),
     fetchMapLeaderboard(mapUids[2], liveToken),
-    fetchZones(coreToken),
+    fetchZones(coreToken, env.DISPLAY_NAMES),
   ]);
 
   const { getCountryIso } = buildZoneLookup(zones);
@@ -384,25 +401,22 @@ async function buildAndCacheResponse(env, cache, cacheKey) {
     tp: leaderboard.length,
   };
 
-  const response = jsonResponse(responseData);
-  const cachedResponse = new Response(response.body, response);
-  cachedResponse.headers.set('Cache-Control', 'public, max-age=120');
-  await cache.put(cacheKey, cachedResponse.clone());
-
-  return cachedResponse;
-}
-
-// ── Background refresh (only if cache is older than 60s) ─────────────
-async function refreshCache(env, cache, cacheKey) {
-  try {
-    await buildAndCacheResponse(env, cache, cacheKey);
-  } catch (err) {
-    console.error('Background refresh error:', err);
-  }
+  await env.DISPLAY_NAMES.put('leaderboard', JSON.stringify(responseData));
+  console.log(`Leaderboard updated: ${leaderboard.length} players`);
 }
 
 // ── Main handler ──────────────────────────────────────────────────────
 export default {
+  // Cron trigger — rebuilds the leaderboard every minute
+  async scheduled(event, env, ctx) {
+    try {
+      await buildAndStoreLeaderboard(env);
+    } catch (err) {
+      console.error('Scheduled refresh error:', err);
+    }
+  },
+
+  // HTTP handler — serves pre-built leaderboard from KV
   async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: CORS_HEADERS });
@@ -413,22 +427,17 @@ export default {
       return jsonResponse({ error: 'Not found' }, 404);
     }
 
-    const cache = caches.default;
-    const cacheKey = new Request(new URL('/leaderboard', request.url).toString());
-    const cached = await cache.match(cacheKey);
-
-    // Always serve cache immediately if available; refresh in background
-    if (cached) {
-      ctx.waitUntil(refreshCache(env, cache, cacheKey));
-      return cached;
+    const data = await env.DISPLAY_NAMES.get('leaderboard', 'text');
+    if (!data) {
+      return jsonResponse({ error: 'Leaderboard not yet available' }, 503);
     }
 
-    // No cache at all — must wait for fresh data
-    try {
-      return await buildAndCacheResponse(env, cache, cacheKey);
-    } catch (err) {
-      console.error('Worker error:', err);
-      return jsonResponse({ error: err.message }, 500);
-    }
+    return new Response(data, {
+      headers: {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'public, max-age=60',
+        ...CORS_HEADERS,
+      },
+    });
   },
 };
