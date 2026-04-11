@@ -1,6 +1,9 @@
 # Red Bull FASTER 2026 — Leaderboard
 
-Combined leaderboard for the three Red Bull FASTER Trackmania 2020 maps: **OBSTACLE**, **EVEREST**, and **SKATE**.
+Leaderboard for the Red Bull FASTER 2026 tournament. 
+Displays current time of players on all 3 of the maps (Obstacle, Everest, Skate) + when they last improved one of their times.
+You can search for players and also sort the leaderboard to one map by clicking on the mapname.
+Times are updated every minute.
 
 ![Screenshot](screenshot.png)
 
@@ -14,7 +17,7 @@ The **frontend** (hosted on GitHub Pages) polls the worker API every 60 seconds 
 
 - **Backend**: Cloudflare Worker with Cron Triggers + KV storage
 - **Frontend**: Vanilla HTML/CSS/JS on GitHub Pages
-- **Data source**: Nadeo Live Services API + Trackmania OAuth API
+- **Data source**: Nadeo Live Services API (Leaderboard times) + Trackmania OAuth API (Player UUID to player displayname translation)
 
 ## Features
 
