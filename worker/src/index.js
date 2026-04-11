@@ -54,25 +54,35 @@ async function authenticateOAuth(clientId, clientSecret) {
 }
 
 // ── Leaderboard fetching ─────────────────────────────────────────────
+const PARALLEL_PAGES = 10;
+
 async function fetchMapLeaderboard(mapUid, token) {
   const allRecords = [];
-  for (let page = 0; page < MAX_PAGES; page++) {
-    const offset = page * PAGE_SIZE;
-    const url = `${NADEO_LIVE_URL}/api/token/leaderboard/group/Personal_Best/map/${mapUid}/top?length=${PAGE_SIZE}&onlyWorld=true&offset=${offset}`;
-    const res = await fetch(url, {
-      headers: {
-        'Authorization': `nadeo_v1 t=${token}`,
-        'User-Agent': USER_AGENT,
-      },
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Leaderboard fetch failed: ${res.status} ${text}`);
+  for (let page = 0; page < MAX_PAGES; page += PARALLEL_PAGES) {
+    const batch = [];
+    for (let i = 0; i < PARALLEL_PAGES && page + i < MAX_PAGES; i++) {
+      const offset = (page + i) * PAGE_SIZE;
+      const url = `${NADEO_LIVE_URL}/api/token/leaderboard/group/Personal_Best/map/${mapUid}/top?length=${PAGE_SIZE}&onlyWorld=true&offset=${offset}`;
+      batch.push(fetch(url, {
+        headers: {
+          'Authorization': `nadeo_v1 t=${token}`,
+          'User-Agent': USER_AGENT,
+        },
+      }));
     }
-    const data = await res.json();
-    const tops = data.tops?.[0]?.top || [];
-    allRecords.push(...tops);
-    if (tops.length < PAGE_SIZE) break;
+    const responses = await Promise.all(batch);
+    let done = false;
+    for (const res of responses) {
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Leaderboard fetch failed: ${res.status} ${text}`);
+      }
+      const data = await res.json();
+      const tops = data.tops?.[0]?.top || [];
+      allRecords.push(...tops);
+      if (tops.length < PAGE_SIZE) { done = true; break; }
+    }
+    if (done) break;
   }
   return allRecords;
 }

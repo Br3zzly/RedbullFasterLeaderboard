@@ -190,8 +190,8 @@ function renderLeaderboard(data) {
   }
 
   $playerCount.textContent = currentData.totalPlayers;
-  lastFetchTime = Date.now();
-  $lastUpdated.textContent = '0s ago';
+  dataTimestamp = currentData.lastUpdated ? new Date(currentData.lastUpdated).getTime() : Date.now();
+  updateTimerDisplay();
 
   sortedData = getSortedData();
   updateHeaderStyles();
@@ -336,9 +336,16 @@ async function fetchLeaderboard() {
 }
 
 // ── Auto-refresh & updated ticker ────────────────────────────────────
-let lastFetchTime = null;
+let dataTimestamp = null;
 let refreshTimer = null;
 let tickTimer = null;
+
+function updateTimerDisplay() {
+  if (dataTimestamp) {
+    const secs = Math.floor((Date.now() - dataTimestamp) / 1000);
+    $lastUpdated.textContent = `${secs}s ago`;
+  }
+}
 
 function startRefreshCycle() {
   if (refreshTimer) clearInterval(refreshTimer);
@@ -351,12 +358,7 @@ function startRefreshCycle() {
 
 function startUpdatedTicker() {
   if (tickTimer) clearInterval(tickTimer);
-  tickTimer = setInterval(() => {
-    if (lastFetchTime) {
-      const secs = Math.floor((Date.now() - lastFetchTime) / 10000) * 10;
-      $lastUpdated.textContent = `${secs}s ago`;
-    }
-  }, 10000);
+  tickTimer = setInterval(updateTimerDisplay, 1000);
 }
 
 // ── Init ──────────────────────────────────────────────────────────────

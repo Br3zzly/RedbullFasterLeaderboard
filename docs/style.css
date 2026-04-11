@@ -221,9 +221,6 @@ body {
 
 .leaderboard {
   min-width: 750px;
-}
-
-.leaderboard {
   width: 100%;
   border-collapse: collapse;
 }
