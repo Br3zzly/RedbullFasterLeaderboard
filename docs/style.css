@@ -331,6 +331,7 @@ body {
 
 .leaderboard td.col-player {
   text-align: left;
+  white-space: nowrap;
 }
 
 .leaderboard tbody tr {
