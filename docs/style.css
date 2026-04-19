@@ -151,6 +151,13 @@ body {
   color: var(--text-secondary);
 }
 
+#lastUpdated {
+  display: inline-block;
+  min-width: 8ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ── Search ────────────────────────────────────────────────────────── */
 .search-input {
   background: var(--bg-primary);
