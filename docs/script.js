@@ -36,10 +36,27 @@ try {
 // ── Expand short API keys ─────────────────────────────────────────────
 function expandEntry(e) {
   return {
-    rank: e.r, name: e.n, flag: e.f,
+    rank: e.r, rank1: e.r1, rank2: e.r2,
+    name: e.n, flag: e.f,
     ts: e.ts || [], rs: e.rs || [],
-    sum: e.s, mc: e.mc, li: e.li,
+    sum: e.s, sum1: e.s1, sum2: e.s2,
+    mc: e.mc, mc1: e.mc1, mc2: e.mc2,
+    li: e.li,
   };
+}
+
+// ── Per-stage field resolution ────────────────────────────────────────
+function stageFields() {
+  if (currentStage === '1') return { sum: 'sum1', mc: 'mc1', rank: 'rank1' };
+  if (currentStage === '2') return { sum: 'sum2', mc: 'mc2', rank: 'rank2' };
+  return { sum: 'sum', mc: 'mc', rank: 'rank' };
+}
+
+function activeNumMaps() {
+  if (!currentData) return 0;
+  if (currentStage === 'all') return currentData.mapNames.length;
+  const stage = currentStage === '1' ? 1 : 2;
+  return currentData.mapStages.filter(s => s === stage).length;
 }
 
 // ── Time formatting ───────────────────────────────────────────────────
@@ -116,9 +133,10 @@ function getSortedData() {
   const list = [...currentData.entries];
 
   if (sortMode === 'total') {
+    const { sum, mc } = stageFields();
     list.sort((a, b) => {
-      if (a.mc !== b.mc) return b.mc - a.mc;
-      return a.sum - b.sum;
+      if (a[mc] !== b[mc]) return b[mc] - a[mc];
+      return a[sum] - b[sum];
     });
   } else if (sortMode.startsWith('map')) {
     const idx = parseInt(sortMode.slice(3), 10);
@@ -187,7 +205,16 @@ function setStage(stage) {
     const mapStage = String(currentData.mapStages[idx] ?? '');
     if (stage !== 'all' && stage !== mapStage) {
       setSort('total');
+      return;
     }
+  }
+
+  // Re-sort and re-render: Total column and ranks are stage-specific
+  if (currentData) {
+    visibleCount = PAGE_SIZE;
+    sortedData = getSortedData();
+    if ($searchInput.value.trim()) applySearch();
+    else renderVisible();
   }
 }
 
@@ -198,11 +225,11 @@ $stageToggle.addEventListener('click', (e) => {
 });
 
 // ── Build a single row ────────────────────────────────────────────────
-function buildRow(e, bestTime, numMaps, mapStages) {
+function buildRow(e, bestTime, numMaps, mapStages, fields, stageMapCount) {
   const tr = document.createElement('tr');
   tr.dataset.playerName = (e.name || '').toLowerCase();
 
-  const dr = e.rank;
+  const dr = e[fields.rank];
 
   if (dr === 1) tr.className = 'top-1';
   else if (dr === 2) tr.className = 'top-2';
@@ -222,10 +249,12 @@ function buildRow(e, bestTime, numMaps, mapStages) {
     mapCellsHtml += `<td class="col-time ${missing}" data-stage="${stage}">${ft !== null ? mr + ft : '—'}</td>`;
   }
 
-  const total = formatTime(e.sum);
+  const sum = e[fields.sum];
+  const mc = e[fields.mc];
+  const total = formatTime(sum);
   let deltaHtml = '';
-  if (sortMode === 'total' && dr > 1 && bestTime > 0 && e.mc === numMaps) {
-    const d = formatDelta(e.sum - bestTime);
+  if (sortMode === 'total' && dr > 1 && bestTime > 0 && mc === stageMapCount) {
+    const d = formatDelta(sum - bestTime);
     if (d) deltaHtml = `<span class="delta">(${d})</span>`;
   }
 
@@ -280,9 +309,10 @@ function renderLeaderboard(data) {
 
 function getBestTime() {
   if (!currentData) return 0;
-  const n = currentData.mapNames.length;
-  const best = currentData.entries.find(e => e.mc === n);
-  return best ? best.sum : 0;
+  const f = stageFields();
+  const n = activeNumMaps();
+  const best = currentData.entries.find(e => e[f.rank] === 1 && e[f.mc] === n);
+  return best ? best[f.sum] : 0;
 }
 
 function updateLoadMore() {
@@ -303,13 +333,15 @@ function loadMore() {
   const bestTime = getBestTime();
   const numMaps = currentData.mapNames.length;
   const stages = currentData.mapStages;
+  const fields = stageFields();
+  const stageMapCount = activeNumMaps();
   const start = visibleCount;
   visibleCount += PAGE_SIZE;
   const end = Math.min(visibleCount, sortedData.length);
 
   const fragment = document.createDocumentFragment();
   for (let i = start; i < end; i++) {
-    fragment.appendChild(buildRow(sortedData[i], bestTime, numMaps, stages));
+    fragment.appendChild(buildRow(sortedData[i], bestTime, numMaps, stages, fields, stageMapCount));
   }
   $tbody.appendChild(fragment);
 
@@ -342,13 +374,15 @@ function applySearch() {
     const bestTime = getBestTime();
     const numMaps = currentData.mapNames.length;
     const stages = currentData.mapStages;
+    const fields = stageFields();
+    const stageMapCount = activeNumMaps();
     const fragment = document.createDocumentFragment();
     let count = 0;
 
     for (const entry of sortedData) {
       if (count >= SEARCH_MAX_RESULTS) break;
       if ((entry.name || '').toLowerCase().includes(query)) {
-        fragment.appendChild(buildRow(entry, bestTime, numMaps, stages));
+        fragment.appendChild(buildRow(entry, bestTime, numMaps, stages, fields, stageMapCount));
         count++;
       }
     }
@@ -371,11 +405,13 @@ function renderVisible() {
   const bestTime = getBestTime();
   const numMaps = currentData.mapNames.length;
   const stages = currentData.mapStages;
+  const fields = stageFields();
+  const stageMapCount = activeNumMaps();
   const limit = Math.min(visibleCount, sortedData.length);
   const fragment = document.createDocumentFragment();
 
   for (let i = 0; i < limit; i++) {
-    fragment.appendChild(buildRow(sortedData[i], bestTime, numMaps, stages));
+    fragment.appendChild(buildRow(sortedData[i], bestTime, numMaps, stages, fields, stageMapCount));
   }
 
   $tbody.innerHTML = '';
