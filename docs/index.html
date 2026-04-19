@@ -14,7 +14,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="Live leaderboard for the Red Bull FASTER 2026 tournament.">
   <meta property="og:title" content="Red Bull FASTER 2026 — Leaderboard">
-  <meta property="og:description" content="Live combined leaderboard for all three Red Bull FASTER Trackmania 2020 maps — OBSTACLE, EVEREST and SKATE.">
+  <meta property="og:description" content="Live combined leaderboard for all Red Bull FASTER Trackmania 2020 maps across Stage 1 and Stage 2.">
   <meta property="og:image" content="https://br3zzly.github.io/RedbullFasterLeaderboard/favicon.ico">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Red Bull FASTER Leaderboard">
@@ -46,6 +46,13 @@
       <div class="status-center">
         <input type="text" id="searchInput" class="search-input" placeholder="Search player...">
       </div>
+      <div class="status-stages">
+        <div class="stage-toggle" id="stageToggle" role="tablist" aria-label="Filter maps by stage">
+          <button type="button" class="stage-btn stage-active" data-stage="all" role="tab" aria-selected="true">All</button>
+          <button type="button" class="stage-btn" data-stage="1" role="tab" aria-selected="false">Stage 1</button>
+          <button type="button" class="stage-btn" data-stage="2" role="tab" aria-selected="false">Stage 2</button>
+        </div>
+      </div>
       <div class="status-right">
         <span class="refresh-dot" id="refreshDot"></span>
         <span class="status-label">Updated <span id="lastUpdated">—</span></span>
@@ -60,12 +67,9 @@
       <div id="error" class="error" style="display:none"></div>
       <table id="leaderboard" class="leaderboard" style="display:none">
         <thead>
-          <tr>
+          <tr id="leaderboardHead">
             <th class="col-rank" id="rankHeader">#</th>
             <th class="col-player">Player</th>
-            <th class="col-time sortable" id="mapHeader1"><span>Map 1</span> <span class="sort-arrow"></span></th>
-            <th class="col-time sortable" id="mapHeader2"><span>Map 2</span> <span class="sort-arrow"></span></th>
-            <th class="col-time sortable" id="mapHeader3"><span>Map 3</span> <span class="sort-arrow"></span></th>
             <th class="col-total sortable sort-active" id="totalHeader"><span>Total</span> <span class="sort-arrow"></span></th>
             <th class="col-improved">Last Improved</th>
           </tr>

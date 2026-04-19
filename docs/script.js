@@ -2,38 +2,42 @@
 const API_URL = 'https://redbull-faster-leaderboard.redbull-faster.workers.dev/leaderboard';
 const REFRESH_INTERVAL = 60;
 const PAGE_SIZE = 100;
+const STAGE_STORAGE_KEY = 'rbf-stage';
 
 // ── DOM refs ──────────────────────────────────────────────────────────
 const $loading = document.getElementById('loading');
 const $error = document.getElementById('error');
 const $table = document.getElementById('leaderboard');
 const $tbody = document.getElementById('leaderboardBody');
+const $headRow = document.getElementById('leaderboardHead');
 const $lastUpdated = document.getElementById('lastUpdated');
 const $playerCount = document.getElementById('playerCount');
 const $refreshDot = document.getElementById('refreshDot');
-const $mapHeader1 = document.getElementById('mapHeader1');
-const $mapHeader2 = document.getElementById('mapHeader2');
-const $mapHeader3 = document.getElementById('mapHeader3');
 const $rankHeader = document.getElementById('rankHeader');
 const $totalHeader = document.getElementById('totalHeader');
 const $searchInput = document.getElementById('searchInput');
 const $loadMoreWrap = document.getElementById('loadMoreWrap');
 const $loadMoreBtn = document.getElementById('loadMoreBtn');
 const $loadMoreInfo = document.getElementById('loadMoreInfo');
+const $stageToggle = document.getElementById('stageToggle');
 
 let currentData = null;
 let sortedData = null;
 let visibleCount = PAGE_SIZE;
-let sortMode = 'total';
-let mapNames = ['Map 1', 'Map 2', 'Map 3'];
+let sortMode = 'total'; // 'total' or `map${index}`
+let currentStage = 'all'; // 'all' | '1' | '2'
+let mapHeaderEls = [];
 
-// ── Expand short API keys to readable names (once on receive) ─────────
+try {
+  const stored = localStorage.getItem(STAGE_STORAGE_KEY);
+  if (stored === 'all' || stored === '1' || stored === '2') currentStage = stored;
+} catch {}
+
+// ── Expand short API keys ─────────────────────────────────────────────
 function expandEntry(e) {
   return {
     rank: e.r, name: e.n, flag: e.f,
-    t1: e.t1, r1: e.r1,
-    t2: e.t2, r2: e.r2,
-    t3: e.t3, r3: e.r3,
+    ts: e.ts || [], rs: e.rs || [],
     sum: e.s, mc: e.mc, li: e.li,
   };
 }
@@ -83,6 +87,29 @@ function flagImg(iso) {
   return `<img class="player-flag" src="https://flagcdn.com/${iso}.svg" alt="${iso}" loading="lazy" onerror="this.style.display='none'">`;
 }
 
+// ── Map header management ─────────────────────────────────────────────
+function buildMapHeaders() {
+  mapHeaderEls.forEach(el => el.remove());
+  mapHeaderEls = [];
+  if (!currentData) return;
+
+  const { mapNames, mapStages } = currentData;
+  for (let i = 0; i < mapNames.length; i++) {
+    const th = document.createElement('th');
+    th.className = 'col-time sortable';
+    th.dataset.mapIdx = String(i);
+    th.dataset.stage = String(mapStages[i] ?? '');
+    th.innerHTML = `<span>${escapeHtml(mapNames[i] || `Map ${i + 1}`)}</span> <span class="sort-arrow"></span>`;
+    const idx = i;
+    th.addEventListener('click', () => {
+      const mode = `map${idx}`;
+      setSort(sortMode === mode ? 'total' : mode);
+    });
+    $headRow.insertBefore(th, $totalHeader);
+    mapHeaderEls.push(th);
+  }
+}
+
 // ── Sorting ───────────────────────────────────────────────────────────
 function getSortedData() {
   if (!currentData) return [];
@@ -93,14 +120,16 @@ function getSortedData() {
       if (a.mc !== b.mc) return b.mc - a.mc;
       return a.sum - b.sum;
     });
-  } else {
-    const key = sortMode === 'map1' ? 't1' : sortMode === 'map2' ? 't2' : 't3';
+  } else if (sortMode.startsWith('map')) {
+    const idx = parseInt(sortMode.slice(3), 10);
     list.sort((a, b) => {
-      const aHas = a[key] !== null;
-      const bHas = b[key] !== null;
+      const av = a.ts[idx];
+      const bv = b.ts[idx];
+      const aHas = av !== null && av !== undefined;
+      const bHas = bv !== null && bv !== undefined;
       if (aHas && !bHas) return -1;
       if (!aHas && bHas) return 1;
-      if (aHas && bHas) return a[key] - b[key];
+      if (aHas && bHas) return av - bv;
       return 0;
     });
   }
@@ -121,16 +150,55 @@ function setSort(mode) {
 }
 
 function updateHeaderStyles() {
-  [$mapHeader1, $mapHeader2, $mapHeader3, $totalHeader].forEach(h => h.classList.remove('sort-active'));
+  mapHeaderEls.forEach(h => h.classList.remove('sort-active'));
+  $totalHeader.classList.remove('sort-active');
 
-  if (sortMode === 'map1') $mapHeader1.classList.add('sort-active');
-  else if (sortMode === 'map2') $mapHeader2.classList.add('sort-active');
-  else if (sortMode === 'map3') $mapHeader3.classList.add('sort-active');
-  else $totalHeader.classList.add('sort-active');
+  if (sortMode.startsWith('map')) {
+    const idx = parseInt(sortMode.slice(3), 10);
+    if (mapHeaderEls[idx]) mapHeaderEls[idx].classList.add('sort-active');
+    else $totalHeader.classList.add('sort-active');
+  } else {
+    $totalHeader.classList.add('sort-active');
+  }
 }
 
+// ── Stage filter ──────────────────────────────────────────────────────
+function applyStageClass() {
+  $table.classList.remove('filter-stage-1', 'filter-stage-2');
+  if (currentStage === '1') $table.classList.add('filter-stage-1');
+  else if (currentStage === '2') $table.classList.add('filter-stage-2');
+}
+
+function setStage(stage) {
+  currentStage = stage;
+  try { localStorage.setItem(STAGE_STORAGE_KEY, stage); } catch {}
+
+  $stageToggle.querySelectorAll('.stage-btn').forEach(b => {
+    const active = b.dataset.stage === stage;
+    b.classList.toggle('stage-active', active);
+    b.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+
+  applyStageClass();
+
+  // If sorting by a map that is now hidden, fall back to total
+  if (sortMode.startsWith('map') && currentData) {
+    const idx = parseInt(sortMode.slice(3), 10);
+    const mapStage = String(currentData.mapStages[idx] ?? '');
+    if (stage !== 'all' && stage !== mapStage) {
+      setSort('total');
+    }
+  }
+}
+
+$stageToggle.addEventListener('click', (e) => {
+  const btn = e.target.closest('.stage-btn');
+  if (!btn) return;
+  setStage(btn.dataset.stage);
+});
+
 // ── Build a single row ────────────────────────────────────────────────
-function buildRow(e, bestTime) {
+function buildRow(e, bestTime, numMaps, mapStages) {
   const tr = document.createElement('tr');
   tr.dataset.playerName = (e.name || '').toLowerCase();
 
@@ -143,17 +211,20 @@ function buildRow(e, bestTime) {
   const rankClass = dr <= 3 ? `rank-${dr}` : '';
   const flag = flagImg(e.flag);
 
-  const ft1 = formatTime(e.t1);
-  const ft2 = formatTime(e.t2);
-  const ft3 = formatTime(e.t3);
+  let mapCellsHtml = '';
+  for (let i = 0; i < numMaps; i++) {
+    const t = e.ts[i];
+    const r = e.rs[i];
+    const ft = formatTime(t);
+    const mr = r != null ? `<span class="map-rank">(${r})</span>` : '';
+    const missing = ft === null ? 'time-missing' : '';
+    const stage = mapStages[i] ?? '';
+    mapCellsHtml += `<td class="col-time ${missing}" data-stage="${stage}">${ft !== null ? mr + ft : '—'}</td>`;
+  }
+
   const total = formatTime(e.sum);
-
-  const mr1 = e.r1 != null ? `<span class="map-rank">(${e.r1})</span>` : '';
-  const mr2 = e.r2 != null ? `<span class="map-rank">(${e.r2})</span>` : '';
-  const mr3 = e.r3 != null ? `<span class="map-rank">(${e.r3})</span>` : '';
-
   let deltaHtml = '';
-  if (sortMode === 'total' && dr > 1 && bestTime > 0 && e.mc === 3) {
+  if (sortMode === 'total' && dr > 1 && bestTime > 0 && e.mc === numMaps) {
     const d = formatDelta(e.sum - bestTime);
     if (d) deltaHtml = `<span class="delta">(${d})</span>`;
   }
@@ -163,9 +234,7 @@ function buildRow(e, bestTime) {
   tr.innerHTML = `
     <td class="col-rank ${rankClass}">${dr}</td>
     <td class="col-player">${flag}${escapeHtml(e.name)}</td>
-    <td class="col-time ${ft1 === null ? 'time-missing' : ''}">${ft1 !== null ? mr1 + ft1 : '—'}</td>
-    <td class="col-time ${ft2 === null ? 'time-missing' : ''}">${ft2 !== null ? mr2 + ft2 : '—'}</td>
-    <td class="col-time ${ft3 === null ? 'time-missing' : ''}">${ft3 !== null ? mr3 + ft3 : '—'}</td>
+    ${mapCellsHtml}
     <td class="col-total">${total ?? '—'}${deltaHtml ? '<br>' + deltaHtml : ''}</td>
     <td class="col-improved">${li}</td>
   `;
@@ -174,19 +243,21 @@ function buildRow(e, bestTime) {
 
 // ── Rendering ─────────────────────────────────────────────────────────
 function renderLeaderboard(data) {
-  // Expand short keys once
   currentData = {
     entries: data.l.map(expandEntry),
-    mapNames: data.mn,
+    mapNames: data.mn || [],
+    mapStages: data.st || [],
     lastUpdated: data.lu,
     totalPlayers: data.tp,
   };
 
-  if (currentData.mapNames) {
-    mapNames = currentData.mapNames;
-    $mapHeader1.childNodes[0].textContent = mapNames[0] || 'Map 1';
-    $mapHeader2.childNodes[0].textContent = mapNames[1] || 'Map 2';
-    $mapHeader3.childNodes[0].textContent = mapNames[2] || 'Map 3';
+  buildMapHeaders();
+  applyStageClass();
+
+  // If loaded stage was for a map that doesn't exist, reset sort
+  if (sortMode.startsWith('map')) {
+    const idx = parseInt(sortMode.slice(3), 10);
+    if (idx >= currentData.mapNames.length) sortMode = 'total';
   }
 
   $playerCount.textContent = currentData.totalPlayers;
@@ -209,7 +280,8 @@ function renderLeaderboard(data) {
 
 function getBestTime() {
   if (!currentData) return 0;
-  const best = currentData.entries.find(e => e.mc === 3);
+  const n = currentData.mapNames.length;
+  const best = currentData.entries.find(e => e.mc === n);
   return best ? best.sum : 0;
 }
 
@@ -227,15 +299,17 @@ function updateLoadMore() {
 }
 
 function loadMore() {
-  if (!sortedData) return;
+  if (!sortedData || !currentData) return;
   const bestTime = getBestTime();
+  const numMaps = currentData.mapNames.length;
+  const stages = currentData.mapStages;
   const start = visibleCount;
   visibleCount += PAGE_SIZE;
   const end = Math.min(visibleCount, sortedData.length);
 
   const fragment = document.createDocumentFragment();
   for (let i = start; i < end; i++) {
-    fragment.appendChild(buildRow(sortedData[i], bestTime));
+    fragment.appendChild(buildRow(sortedData[i], bestTime, numMaps, stages));
   }
   $tbody.appendChild(fragment);
 
@@ -258,7 +332,7 @@ let searchTimeout = null;
 function applySearch() {
   const query = $searchInput.value.trim().toLowerCase();
 
-  if (query && sortedData) {
+  if (query && sortedData && currentData) {
     if (query.length < 2) {
       $tbody.innerHTML = '';
       $loadMoreWrap.style.display = 'none';
@@ -266,13 +340,15 @@ function applySearch() {
     }
 
     const bestTime = getBestTime();
+    const numMaps = currentData.mapNames.length;
+    const stages = currentData.mapStages;
     const fragment = document.createDocumentFragment();
     let count = 0;
 
     for (const entry of sortedData) {
       if (count >= SEARCH_MAX_RESULTS) break;
       if ((entry.name || '').toLowerCase().includes(query)) {
-        fragment.appendChild(buildRow(entry, bestTime));
+        fragment.appendChild(buildRow(entry, bestTime, numMaps, stages));
         count++;
       }
     }
@@ -291,13 +367,15 @@ function debouncedSearch() {
 }
 
 function renderVisible() {
-  if (!sortedData) return;
+  if (!sortedData || !currentData) return;
   const bestTime = getBestTime();
+  const numMaps = currentData.mapNames.length;
+  const stages = currentData.mapStages;
   const limit = Math.min(visibleCount, sortedData.length);
   const fragment = document.createDocumentFragment();
 
   for (let i = 0; i < limit; i++) {
-    fragment.appendChild(buildRow(sortedData[i], bestTime));
+    fragment.appendChild(buildRow(sortedData[i], bestTime, numMaps, stages));
   }
 
   $tbody.innerHTML = '';
@@ -307,10 +385,7 @@ function renderVisible() {
 
 $searchInput.addEventListener('input', debouncedSearch);
 
-// ── Sort click handlers ───────────────────────────────────────────────
-$mapHeader1.addEventListener('click', () => setSort(sortMode === 'map1' ? 'total' : 'map1'));
-$mapHeader2.addEventListener('click', () => setSort(sortMode === 'map2' ? 'total' : 'map2'));
-$mapHeader3.addEventListener('click', () => setSort(sortMode === 'map3' ? 'total' : 'map3'));
+// ── Total header handler ──────────────────────────────────────────────
 $totalHeader.addEventListener('click', () => setSort('total'));
 
 // ── Data fetching ─────────────────────────────────────────────────────
@@ -362,6 +437,8 @@ function startUpdatedTicker() {
 }
 
 // ── Init ──────────────────────────────────────────────────────────────
+setStage(currentStage);
+
 fetchLeaderboard().then(() => {
   startRefreshCycle();
   startUpdatedTicker();

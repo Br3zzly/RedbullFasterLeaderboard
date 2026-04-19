@@ -1,7 +1,10 @@
 const MAPS = [
-  { uidKey: 'MAP1_UID', nameKey: 'MAP1_NAME' },
-  { uidKey: 'MAP2_UID', nameKey: 'MAP2_NAME' },
-  { uidKey: 'MAP3_UID', nameKey: 'MAP3_NAME' },
+  { uidKey: 'MAP1_UID', nameKey: 'MAP1_NAME', stage: 1 },
+  { uidKey: 'MAP2_UID', nameKey: 'MAP2_NAME', stage: 1 },
+  { uidKey: 'MAP3_UID', nameKey: 'MAP3_NAME', stage: 1 },
+  { uidKey: 'MAP4_UID', nameKey: 'MAP4_NAME', stage: 2 },
+  { uidKey: 'MAP5_UID', nameKey: 'MAP5_NAME', stage: 2 },
+  { uidKey: 'MAP6_UID', nameKey: 'MAP6_NAME', stage: 2 },
 ];
 
 const NADEO_AUTH_URL = 'https://prod.trackmania.core.nadeo.online/v2/authentication/token/basic';
@@ -287,8 +290,8 @@ async function fetchDisplayNames(accountIds, oauthToken, kvNamespace) {
 }
 
 // ── Aggregation ───────────────────────────────────────────────────────
-function aggregateLeaderboard(map1Records, map2Records, map3Records, zoneResolver) {
-  const buildLookup = (records) => {
+function aggregateLeaderboard(mapRecordsList, zoneResolver) {
+  const lookups = mapRecordsList.map(records => {
     const m = new Map();
     for (const r of records) {
       m.set(r.accountId, {
@@ -299,39 +302,33 @@ function aggregateLeaderboard(map1Records, map2Records, map3Records, zoneResolve
       });
     }
     return m;
-  };
+  });
 
-  const map1 = buildLookup(map1Records);
-  const map2 = buildLookup(map2Records);
-  const map3 = buildLookup(map3Records);
-
-  const allIds = new Set([...map1.keys(), ...map2.keys(), ...map3.keys()]);
+  const allIds = new Set();
+  for (const m of lookups) for (const id of m.keys()) allIds.add(id);
 
   const entries = [];
   for (const id of allIds) {
-    const r1 = map1.get(id);
-    const r2 = map2.get(id);
-    const r3 = map3.get(id);
+    const recs = lookups.map(m => m.get(id) || null);
+    const times = recs.map(r => r?.score ?? null);
+    const ranks = recs.map(r => r?.position ?? null);
 
-    const t1 = r1?.score ?? null;
-    const t2 = r2?.score ?? null;
-    const t3 = r3?.score ?? null;
+    let mapCount = 0;
+    let sumTime = 0;
+    for (const t of times) {
+      if (t !== null) { mapCount++; sumTime += t; }
+    }
 
-    // Sum all available times for sorting
-    const mapCount = (t1 !== null ? 1 : 0) + (t2 !== null ? 1 : 0) + (t3 !== null ? 1 : 0);
-    const sumTime = (t1 ?? 0) + (t2 ?? 0) + (t3 ?? 0);
-
-    const timestamps = [r1?.timestamp, r2?.timestamp, r3?.timestamp].filter(Boolean);
+    const timestamps = recs.map(r => r?.timestamp).filter(Boolean);
     const lastImproved = timestamps.length > 0 ? Math.max(...timestamps) : null;
 
-    const zoneId = r1?.zoneId || r2?.zoneId || r3?.zoneId || null;
+    let zoneId = null;
+    for (const r of recs) { if (r?.zoneId) { zoneId = r.zoneId; break; } }
     const countryIso = zoneResolver ? zoneResolver(zoneId) : null;
 
     entries.push({
       accountId: id,
-      map1Time: t1, map1Rank: r1?.position ?? null,
-      map2Time: t2, map2Rank: r2?.position ?? null,
-      map3Time: t3, map3Rank: r3?.position ?? null,
+      times, ranks,
       sumTime, mapCount, lastImproved, countryIso,
     });
   }
@@ -378,16 +375,15 @@ async function buildAndStoreLeaderboard(env) {
 
   const mapUids = MAPS.map(m => env[m.uidKey]);
   const mapNames = MAPS.map(m => env[m.nameKey]);
+  const mapStages = MAPS.map(m => m.stage);
 
-  const [map1Records, map2Records, map3Records, zones] = await Promise.all([
-    fetchMapLeaderboard(mapUids[0], liveToken),
-    fetchMapLeaderboard(mapUids[1], liveToken),
-    fetchMapLeaderboard(mapUids[2], liveToken),
+  const [mapRecordsList, zones] = await Promise.all([
+    Promise.all(mapUids.map(uid => fetchMapLeaderboard(uid, liveToken))),
     fetchZones(coreToken, env.KV_DATA),
   ]);
 
   const { getCountryIso } = buildZoneLookup(zones);
-  const entries = aggregateLeaderboard(map1Records, map2Records, map3Records, getCountryIso);
+  const entries = aggregateLeaderboard(mapRecordsList, getCountryIso);
 
   const allAccountIds = entries.map(e => e.accountId);
   const displayNames = await fetchDisplayNames(allAccountIds, oauthToken, env.KV_DATA);
@@ -396,9 +392,8 @@ async function buildAndStoreLeaderboard(env) {
     r: e.rank,
     n: displayNames[e.accountId] || e.accountId,
     f: e.countryIso,
-    t1: e.map1Time, r1: e.map1Rank,
-    t2: e.map2Time, r2: e.map2Rank,
-    t3: e.map3Time, r3: e.map3Rank,
+    ts: e.times,
+    rs: e.ranks,
     s: e.sumTime,
     mc: e.mapCount,
     li: e.lastImproved,
@@ -407,6 +402,7 @@ async function buildAndStoreLeaderboard(env) {
   const responseData = {
     l: leaderboard,
     mn: mapNames,
+    st: mapStages,
     lu: new Date().toISOString(),
     tp: leaderboard.length,
   };
