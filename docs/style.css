@@ -353,9 +353,10 @@ body {
   background: var(--bg-row-hover);
 }
 
-/* Column widths */
+/* Column widths (proportional weights — width: 100% on the table
+   distributes any extra container space across all columns) */
 .col-rank { width: 50px; }
-.col-player { width: auto; min-width: 180px; }
+.col-player { width: 200px; }
 .col-time { width: 115px; }
 .col-total { width: 130px; }
 .col-improved { width: 110px; }
