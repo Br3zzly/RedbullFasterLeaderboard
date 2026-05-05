@@ -25,22 +25,22 @@ let currentData = null;
 let sortedData = null;
 let visibleCount = PAGE_SIZE;
 let sortMode = 'total'; // 'total' or `map${index}`
-let currentStage = 'all'; // 'all' | '1' | '2'
+let currentStage = 'all'; // 'all' | '1' | '2' | '3'
 let mapHeaderEls = [];
 
 try {
   const stored = localStorage.getItem(STAGE_STORAGE_KEY);
-  if (stored === 'all' || stored === '1' || stored === '2') currentStage = stored;
+  if (stored === 'all' || stored === '1' || stored === '2' || stored === '3') currentStage = stored;
 } catch {}
 
 // ── Expand short API keys ─────────────────────────────────────────────
 function expandEntry(e) {
   return {
-    rank: e.r, rank1: e.r1, rank2: e.r2,
+    rank: e.r, rank1: e.r1, rank2: e.r2, rank3: e.r3,
     name: e.n, flag: e.f,
     ts: e.ts || [], rs: e.rs || [],
-    sum: e.s, sum1: e.s1, sum2: e.s2,
-    mc: e.mc, mc1: e.mc1, mc2: e.mc2,
+    sum: e.s, sum1: e.s1, sum2: e.s2, sum3: e.s3,
+    mc: e.mc, mc1: e.mc1, mc2: e.mc2, mc3: e.mc3,
     li: e.li,
   };
 }
@@ -49,13 +49,14 @@ function expandEntry(e) {
 function stageFields() {
   if (currentStage === '1') return { sum: 'sum1', mc: 'mc1', rank: 'rank1' };
   if (currentStage === '2') return { sum: 'sum2', mc: 'mc2', rank: 'rank2' };
+  if (currentStage === '3') return { sum: 'sum3', mc: 'mc3', rank: 'rank3' };
   return { sum: 'sum', mc: 'mc', rank: 'rank' };
 }
 
 function activeNumMaps() {
   if (!currentData) return 0;
   if (currentStage === 'all') return currentData.mapNames.length;
-  const stage = currentStage === '1' ? 1 : 2;
+  const stage = parseInt(currentStage, 10);
   return currentData.mapStages.filter(s => s === stage).length;
 }
 
@@ -182,9 +183,10 @@ function updateHeaderStyles() {
 
 // ── Stage filter ──────────────────────────────────────────────────────
 function applyStageClass() {
-  $table.classList.remove('filter-stage-1', 'filter-stage-2');
+  $table.classList.remove('filter-stage-1', 'filter-stage-2', 'filter-stage-3');
   if (currentStage === '1') $table.classList.add('filter-stage-1');
   else if (currentStage === '2') $table.classList.add('filter-stage-2');
+  else if (currentStage === '3') $table.classList.add('filter-stage-3');
 }
 
 function setStage(stage) {

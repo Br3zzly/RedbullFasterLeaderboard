@@ -18,6 +18,11 @@ MAP6_UID = "KFMQGbo1G25H2iCQbqefVl8_BAl"
 MAP4_NAME = "RAILWAYS"
 MAP5_NAME = "SOAPBOX"
 MAP6_NAME = "ROADTRIP"
+# Stage 3
+MAP7_UID = "mYSvZvxWeDiMcQibONBVLph9Xm1"
+MAP8_UID = "afmtEmbAVDR0VMz4BGWd9gS7jX"
+MAP7_NAME = "AMSTERDAM"
+MAP8_NAME = "AMAZE"
 
 # Secrets (set via `wrangler secret put`):
 # NADEO_LOGIN        — Service account login

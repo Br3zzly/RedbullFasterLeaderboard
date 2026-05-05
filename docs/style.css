@@ -293,11 +293,24 @@ body {
   min-width: 750px;
 }
 
+.leaderboard.filter-stage-3 {
+  min-width: 600px;
+}
+
 .leaderboard.filter-stage-1 th[data-stage="2"],
-.leaderboard.filter-stage-1 td[data-stage="2"] { display: none; }
+.leaderboard.filter-stage-1 td[data-stage="2"],
+.leaderboard.filter-stage-1 th[data-stage="3"],
+.leaderboard.filter-stage-1 td[data-stage="3"] { display: none; }
 
 .leaderboard.filter-stage-2 th[data-stage="1"],
-.leaderboard.filter-stage-2 td[data-stage="1"] { display: none; }
+.leaderboard.filter-stage-2 td[data-stage="1"],
+.leaderboard.filter-stage-2 th[data-stage="3"],
+.leaderboard.filter-stage-2 td[data-stage="3"] { display: none; }
+
+.leaderboard.filter-stage-3 th[data-stage="1"],
+.leaderboard.filter-stage-3 td[data-stage="1"],
+.leaderboard.filter-stage-3 th[data-stage="2"],
+.leaderboard.filter-stage-3 td[data-stage="2"] { display: none; }
 
 .leaderboard thead {
   background: var(--bg-primary);

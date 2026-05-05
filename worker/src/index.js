@@ -5,6 +5,8 @@ const MAPS = [
   { uidKey: 'MAP4_UID', nameKey: 'MAP4_NAME', stage: 2 },
   { uidKey: 'MAP5_UID', nameKey: 'MAP5_NAME', stage: 2 },
   { uidKey: 'MAP6_UID', nameKey: 'MAP6_NAME', stage: 2 },
+  { uidKey: 'MAP7_UID', nameKey: 'MAP7_NAME', stage: 3 },
+  { uidKey: 'MAP8_UID', nameKey: 'MAP8_NAME', stage: 3 },
 ];
 
 const NADEO_AUTH_URL = 'https://prod.trackmania.core.nadeo.online/v2/authentication/token/basic';
@@ -316,12 +318,14 @@ function aggregateLeaderboard(mapRecordsList, mapStages, zoneResolver) {
     let mcAll = 0, sumAll = 0;
     let mc1 = 0, sum1 = 0;
     let mc2 = 0, sum2 = 0;
+    let mc3 = 0, sum3 = 0;
     for (let i = 0; i < times.length; i++) {
       const t = times[i];
       if (t === null) continue;
       mcAll++; sumAll += t;
       if (mapStages[i] === 1) { mc1++; sum1 += t; }
       else if (mapStages[i] === 2) { mc2++; sum2 += t; }
+      else if (mapStages[i] === 3) { mc3++; sum3 += t; }
     }
 
     const timestamps = recs.map(r => r?.timestamp).filter(Boolean);
@@ -337,6 +341,7 @@ function aggregateLeaderboard(mapRecordsList, mapStages, zoneResolver) {
       sumAll, mcAll,
       sum1, mc1,
       sum2, mc2,
+      sum3, mc3,
       lastImproved, countryIso,
     });
   }
@@ -360,6 +365,12 @@ function aggregateLeaderboard(mapRecordsList, mapStages, zoneResolver) {
     return a.sum2 - b.sum2;
   });
   for (let i = 0; i < byStage2.length; i++) byStage2[i].rank2 = i + 1;
+
+  const byStage3 = [...entries].sort((a, b) => {
+    if (a.mc3 !== b.mc3) return b.mc3 - a.mc3;
+    return a.sum3 - b.sum3;
+  });
+  for (let i = 0; i < byStage3.length; i++) byStage3[i].rank3 = i + 1;
 
   return entries;
 }
@@ -406,13 +417,13 @@ async function buildAndStoreLeaderboard(env) {
   const displayNames = await fetchDisplayNames(allAccountIds, oauthToken, env.KV_DATA);
 
   const leaderboard = entries.map(e => ({
-    r: e.rank, r1: e.rank1, r2: e.rank2,
+    r: e.rank, r1: e.rank1, r2: e.rank2, r3: e.rank3,
     n: displayNames[e.accountId] || e.accountId,
     f: e.countryIso,
     ts: e.times,
     rs: e.ranks,
-    s: e.sumAll, s1: e.sum1, s2: e.sum2,
-    mc: e.mcAll, mc1: e.mc1, mc2: e.mc2,
+    s: e.sumAll, s1: e.sum1, s2: e.sum2, s3: e.sum3,
+    mc: e.mcAll, mc1: e.mc1, mc2: e.mc2, mc3: e.mc3,
     li: e.lastImproved,
   }));
 
